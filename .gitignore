@@ -1,0 +1,12 @@
+# Benchmark outputs (CSV, per-run json/logs, quality markdown)
+bench_results/
+
+# Local scratch / agent memory
+.local/
+
+# macOS
+.DS_Store
+
+# Downloaded GGUFs / HF cache, if ever placed in-tree
+*.gguf
+llama-cache/
