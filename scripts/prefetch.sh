@@ -7,10 +7,12 @@
 # Uses llama.cpp's own -hf resolver (not huggingface-cli) so the cache layout
 # matches exactly what run-bench.sh / run-quality.sh expect — whatever you set
 # for LLAMA_CACHE / HF_HOME is honored, with zero chance of a mismatch.
-# Each model is loaded CPU-only (mmap, -ngl 0) for a 1-token pass: this pulls
-# the full file to disk and integrity-checks it, without needing the GPU and
-# without loading all weights into RAM (mmap only faults in what it touches).
-# Already-cached models are skipped instantly.
+# Each model gets a minimal CPU-only llama-bench load (-ngl 0, tiny -p/-n): the
+# -hf download pulls the full file to disk and the load confirms it parses,
+# without needing the GPU. We use llama-bench, NOT llama-cli, because newer
+# llama.cpp builds dropped headless completion from llama-cli (it now defaults to
+# interactive conversation mode and rejects -no-cnv); llama-bench is always
+# non-interactive. Already-cached models are skipped instantly.
 #
 # Downloads run in PARALLEL, up to PREFETCH_JOBS at a time (default 3), so a big
 # matrix isn't gated on one file at a time. Set PREFETCH_JOBS in configs.sh (or
@@ -22,7 +24,7 @@ cd "$(dirname "$0")"
 source ./configs.sh
 PREFETCH_JOBS="${PREFETCH_JOBS:-3}"   # fallback if configs.sh predates this knob
 
-[ -x "$LLAMA_CLI" ] || { echo "llama-cli not found at $LLAMA_CLI — set LLAMA_DIR in configs.sh"; exit 1; }
+[ -x "$LLAMA_BENCH" ] || { echo "llama-bench not found at $LLAMA_BENCH — set LLAMA_DIR in configs.sh"; exit 1; }
 mkdir -p "$OUTDIR"
 
 echo "Cache target: ${LLAMA_CACHE:-${HF_HOME:-$HOME/.cache/huggingface}}"
@@ -30,13 +32,13 @@ echo "Prefetching ${#CONFIGS[@]} models, up to $PREFETCH_JOBS at a time (the slo
 echo "Tip: if you hit HF rate limits, 'export HF_TOKEN=hf_xxx' first (or lower PREFETCH_JOBS)."
 echo
 
-# Download one model: the CPU-only 1-token pass pulls the full file to disk and
-# integrity-checks it. The pass/fail verdict is recorded in a per-label .status
-# file so the parallel workers can be tallied after they all finish (a subshell
-# can't increment a counter in the parent).
+# Download + verify one model: a minimal CPU-only llama-bench run triggers the
+# -hf download and confirms the file loads. The pass/fail verdict is recorded in
+# a per-label .status file so the parallel workers can be tallied after they all
+# finish (a subshell can't increment a counter in the parent).
 fetch_one() {
   local label=$1 repo=$2
-  if "$LLAMA_CLI" -hf "$repo" -ngl 0 -n 1 -p "ok" -no-cnv --no-warmup \
+  if "$LLAMA_BENCH" -hf "$repo" -ngl 0 -p 1 -n 1 -r 1 \
        > "$OUTDIR/prefetch_${label}.log" 2>&1; then
     echo OK   > "$OUTDIR/prefetch_${label}.status"
     echo "    OK      $label  ($repo)"
