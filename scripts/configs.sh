@@ -79,5 +79,10 @@ CONFIGS=(
 
   # --- uncensored / Heretic (optional — isolated-sandbox track only; see model-benches/qwen36.md §3) ---
   # "27B_Heretic_Youssofal|Youssofal/Qwen3.6-27B-Abliterated-Heretic-Uncensored-GGUF:Q4_K_M|dense||../templates/qwen36-froggeric-v20.jinja"
+  # 3-bit 27B Heretic: smaller, aims to fit the dense model fully on-GPU with KV room (Q4_K_M offloads).
+  #   Q3_K_M is listed by the uploader (qwen36.md §3). Q3_K_L is NOT documented for this repo —
+  #   confirm the tag exists on the HF page before uncommenting, or swap in an uploader that ships it.
+  # "27B_Heretic_Youssofal_Q3_K_M|Youssofal/Qwen3.6-27B-Abliterated-Heretic-Uncensored-GGUF:Q3_K_M|dense||../templates/qwen36-froggeric-v20.jinja"
+  # "27B_Heretic_Youssofal_Q3_K_L|Youssofal/Qwen3.6-27B-Abliterated-Heretic-Uncensored-GGUF:Q3_K_L|dense||../templates/qwen36-froggeric-v20.jinja"  # [NEEDS SOURCE: confirm Q3_K_L on HF]
   # "35B_Heretic_HauhauCS|fredrezones55/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive:Q4_K_P|moe||../templates/qwen36-froggeric-v20.jinja"
 )

@@ -60,7 +60,7 @@ Not all 4-bit quants are peers. Unsloth's own KL-divergence benchmarks put **UD-
 | **`UD-Q4_K_XL`** ⭐ | ~16 GB | ~22 GB | **Best 4-bit quality/size.** Default quality pick. Dynamic Q5_K on key layers. |
 | **`UD-IQ4_NL_XL`** ⭐ | ~14.5 GB | ~19.5 GB | New Unsloth non-linear i-quant, **CPU/RAM-friendly**: matters for the MoE since its experts run on DDR5. Top candidate for the **MoE**. |
 | `IQ4_XS` | ~13.8-15 GB | ~19 GB | Most compressed (~4.25 bpw), faster generation. **Best shot at the 27B dense fully on GPU.** |
-| `Q4_K_M` | ~15.2 GB | ~22 GB | Reference only, so your numbers compare to the world's. Dominated by UD-Q4_K_XL. |
+| `Q4_K_M` | ~15.2 GB | ~22 GB | **Baseline comparison only — don't run locally.** A published reference point so your numbers line up with the world's; dominated by UD-Q4_K_XL on this hardware. |
 | `Q4_K_S` *(optional)* | ~14.2 GB | ~20 GB | Bracketed by IQ4_XS and Q4_K_M; little unique value. Skip unless a fit gap appears. |
 
 **Quick mapping:**
@@ -87,7 +87,6 @@ If you want a variant that won't false-refuse on benign agentic, security-resear
 
 | Model | Base | Refusals↓ | KLD vs base | 4-bit options | MTP? | Notes for 16 GB |
 |---|---|---|---|---|---|---|
-| **DavidAU …NEO-CODE-Di-IMatrix-MAX** | 27B dense, Heretic + Unsloth finetune | 4/100 | 0.0469 | IQ4_XS 15.9, Q4_K_S 15.9, IQ4_NL 16.1, Q4_K_M 16.9 GB | ❌ | **Coding-focused di-imatrix.** But "MAX" upcasting makes these *bigger*: Q4_K_M (16.9 GB) **exceeds 16 GB → forces offload**; even IQ4_XS leaves little KV room. Best coding-tuned pick if you accept the offload. |
 | **Youssofal/Qwen3.6-27B-Abliterated-Heretic-Uncensored** | 27B dense, pure abliteration (no finetune) | low | **0.0282** (lowest) | Q4_K_M, Q3_K_M, Q2_K | ❌ | **Least capability drift** (lowest KLD): closest to stock 27B, just refusals removed. Best "minimal-intervention" 27B. |
 | **llmfan46/…35B-A3B-uncensored-heretic-Native-MTP-Preserved** | 35B-A3B MoE | low | low | i1/K-quants incl. Q4_K | ✅ **MTP heads kept** | **The only uncensored MoE that keeps MTP** → fits the speculative-decoding plan. Top MoE pick for this track. |
 | **fredrezones55/…35B-A3B-Uncensored-HauhauCS-Aggressive** | 35B-A3B MoE | **0/465** | n/a | `Q4_K_P` ("Perfect" custom quants) | ❌ | Most aggressive de-censor; K_P quants claim +1-2 quant levels of quality at +5-15% size. No MTP. |
@@ -100,10 +99,9 @@ If you want a variant that won't false-refuse on benign agentic, security-resear
 On llama.cpp, **MTP + vision (`--mmproj`) can't run together yet**, and most Heretic variants drop MTP entirely. So you pick **two of three**: uncensored / MTP / vision. Practical resolutions:
 - **Uncensored + MTP** → llmfan46 MoE, drop vision.
 - **Uncensored + vision** → any Heretic variant + its mmproj, drop MTP.
-- **Coding-tuned uncensored** → DavidAU 27B, accept offload + no MTP.
 
 ### Recommended uncensored picks
-- **27B (quality-retention):** Youssofal abliterated (lowest KLD) at Q4_K_M. **27B (coding-tuned):** DavidAU NEO-CODE at IQ4_XS, but bench the offload penalty, since these run larger.
+- **27B (quality-retention):** Youssofal abliterated (lowest KLD) at Q4_K_M.
 - **35B-A3B (speed + MTP):** llmfan46 MTP-Preserved at Q4_K, expert-offload to RAM like the stock MoE.
 
 > Run these through the **same scripts** as the stock models (just add their lines to `configs.sh`). The KLD numbers are the vendors' own; your Phase C quality pass is what actually decides whether abliteration cost you anything.
@@ -254,9 +252,13 @@ nano scripts/configs.sh           # set LLAMA_DIR, edit the CONFIGS matrix
 | `35B_UD-Q4_K_XL` | UD-Q4_K_XL | moe | 0-32K | quality compare |
 | `35B_UD-Q3_K_M`† | UD-Q3_K_M | moe | 0-32K | mostly-in-VRAM option |
 | `27B_Heretic_Youssofal` | Q4_K_M | dense | 0-32K | uncensored, lowest KLD *(commented out by default)* |
+| `27B_Heretic_Youssofal_Q3_K_M` | Q3_K_M | dense | 0-32K | uncensored 3-bit; smaller, fits dense on-GPU *(commented out)* |
+| `27B_Heretic_Youssofal_Q3_K_L`‡ | Q3_K_L | dense | 0-32K | uncensored top-3-bit *(commented out; confirm tag on HF)* |
 | `35B_Heretic_HauhauCS` | Q4_K_P | moe | 0-32K | uncensored MoE *(commented out by default)* |
 
 †Not a 4-bit quant, but `UD-Q3_K_M` (~16.6 GB) is the one config that gets the **MoE mostly into 16 GB VRAM**, worth keeping as the "max-speed, accept slight quality loss" option, and it directly answers the Q3_K_M-vs-Q4 question.
+
+‡`Q3_K_L` is **not** in Youssofal's documented quant list (§3 shows `Q4_K_M / Q3_K_M / Q2_K`). Confirm the tag exists on the HF repo before running, or point the config line at an uploader that ships a top-3-bit 27B. `Q3_K_M` (the row above it) is grounded.
 
 ---
 
