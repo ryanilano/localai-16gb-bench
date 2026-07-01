@@ -38,6 +38,9 @@ DEPTHS=(0 4096 8192 16384 32768)   # context-fill depths to sweep
 KV_QUANT="q8_0"                    # KV cache type (q8_0 halves KV vs f16)
 THREADS=8                          # physical cores to use (tune to your CPU)
 PORT=8080                          # llama-server port for the quality pass
+PREFETCH_JOBS="${PREFETCH_JOBS:-3}" # parallel downloads in prefetch.sh; 2-4 is usually best
+                                   # (more just thrashes the disk / trips HF rate limits).
+                                   # Env-overridable: PREFETCH_JOBS=4 ./prefetch.sh
 
 # MoE expert offload: 99 = ALL expert layers in DDR5 RAM, attention on GPU.
 # Lower it to pull experts back onto the GPU until VRAM ~fills (= faster).

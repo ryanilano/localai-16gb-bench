@@ -42,8 +42,9 @@ on macOS but **not meant to run here**. They run on the GPU box (the reference i
 
 ```
 configs.sh   ← the ONE file an operator edits. Defines: LLAMA_DIR (path to llama.cpp build),
-               the CONFIGS test matrix, DEPTHS, KV_QUANT, THREADS, NCMOE_ALL, and the global
-               fallbacks CHAT_TEMPLATE / SYS_DEFAULT. Sourced by all three scripts.
+               the CONFIGS test matrix, DEPTHS, KV_QUANT, THREADS, NCMOE_ALL, PREFETCH_JOBS
+               (parallel downloads in prefetch.sh), and the global fallbacks CHAT_TEMPLATE /
+               SYS_DEFAULT. Sourced by all three scripts.
    ▲
    │ source ./configs.sh
    │
