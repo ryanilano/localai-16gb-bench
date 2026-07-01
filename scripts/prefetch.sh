@@ -24,6 +24,15 @@ cd "$(dirname "$0")"
 source ./configs.sh
 PREFETCH_JOBS="${PREFETCH_JOBS:-3}"   # fallback if configs.sh predates this knob
 
+# Show an aggregate download-progress line every PROGRESS_EVERY seconds while
+# models are pulling, so a long download looks alive instead of hung. It's
+# derived from the growing on-disk cache, NOT llama.cpp's native progress bar:
+# that bar is suppressed when output isn't a TTY, and we redirect each parallel
+# worker to a log. For the real per-file bar, pull one at a time on your terminal
+# (PREFETCH_JOBS=1). Silence this line with PREFETCH_PROGRESS=0.
+PREFETCH_PROGRESS="${PREFETCH_PROGRESS:-1}"
+PROGRESS_EVERY="${PROGRESS_EVERY:-5}"   # seconds between progress ticks
+
 [ -x "$LLAMA_BENCH" ] || { echo "llama-bench not found at $LLAMA_BENCH — set LLAMA_DIR in configs.sh"; exit 1; }
 mkdir -p "$OUTDIR"
 
@@ -50,17 +59,41 @@ fetch_one() {
 
 rm -f "$OUTDIR"/prefetch_*.status        # clear tallies from a previous run
 
+# Aggregate download progress: sum the on-disk model cache and report the delta
+# since the last tick (≈ download speed). The cache dir varies by llama.cpp
+# version (~/.cache/llama.cpp on newer builds, ~/.cache/huggingface on older),
+# so watch every plausible one that exists and let the growing one show through.
+# A run of "+0 MiB" ticks means a stalled download — kill it and re-run.
+_cache_dirs=()
+for _d in "${LLAMA_CACHE:-}" "${HF_HOME:-}" "$HOME/.cache/llama.cpp" "$HOME/.cache/huggingface"; do
+  [ -n "$_d" ] && [ -d "$_d" ] && _cache_dirs+=("$_d")
+done
+_last_kib=0
+show_progress() {
+  [ "$PREFETCH_PROGRESS" = 1 ] && [ "${#_cache_dirs[@]}" -gt 0 ] || return 0
+  local now_kib
+  now_kib=$(du -sck "${_cache_dirs[@]}" 2>/dev/null | tail -1 | cut -f1)
+  [ -n "$now_kib" ] || return 0
+  if [ "$_last_kib" -gt 0 ] && [ "$now_kib" -ge "$_last_kib" ]; then
+    printf '      .. downloading: cache %d GiB, +%d MiB in ~%ds (%s active)\n' \
+      "$(( now_kib / 1048576 ))" "$(( (now_kib - _last_kib) / 1024 ))" \
+      "$PROGRESS_EVERY" "$(jobs -rp | wc -l | tr -d ' ')"
+  fi
+  _last_kib=$now_kib
+}
+
 # Launch downloads, keeping at most PREFETCH_JOBS running at once. The throttle
-# polls the running background-job count once a second before starting the next.
+# polls the running-job count every PROGRESS_EVERY seconds and prints progress.
 n=0
 for entry in "${CONFIGS[@]}"; do
   IFS='|' read -r label repo type sys tmpl <<< "$entry"   # sys/tmpl unused here; read them so they don't fold into $type
   n=$((n+1))
-  while [ "$(jobs -rp | wc -l)" -ge "$PREFETCH_JOBS" ]; do sleep 1; done
+  while [ "$(jobs -rp | wc -l)" -ge "$PREFETCH_JOBS" ]; do show_progress; sleep "$PROGRESS_EVERY"; done
   echo "[$n/${#CONFIGS[@]}] start: $label  ($repo)"
   fetch_one "$label" "$repo" &
 done
-wait                                     # let the final batch finish
+while [ "$(jobs -rp | wc -l)" -gt 0 ]; do show_progress; sleep "$PROGRESS_EVERY"; done
+wait                                     # reap the final batch
 
 fail=$(grep -lx FAIL "$OUTDIR"/prefetch_*.status 2>/dev/null | wc -l | tr -d ' ')
 rm -f "$OUTDIR"/prefetch_*.status        # keep the .log files, drop the tally files
