@@ -33,6 +33,13 @@ PREFETCH_JOBS="${PREFETCH_JOBS:-3}"   # fallback if configs.sh predates this kno
 PREFETCH_PROGRESS="${PREFETCH_PROGRESS:-1}"
 PROGRESS_EVERY="${PROGRESS_EVERY:-5}"   # seconds between progress ticks
 
+# Opt-in safety net: llama.cpp's -hf downloader has no timeout of its own, so a
+# dead socket can hang a fetch forever (we saw a 76-min stall). Set PREFETCH_TIMEOUT
+# to cap each model's fetch via `timeout`; empty = off (default). Use a duration
+# LONGER than your slowest real download so only a truly stalled transfer is killed,
+# e.g. PREFETCH_TIMEOUT=45m. A timed-out model is marked FAIL — re-run to resume.
+PREFETCH_TIMEOUT="${PREFETCH_TIMEOUT:-}"
+
 [ -x "$LLAMA_BENCH" ] || { echo "llama-bench not found at $LLAMA_BENCH — set LLAMA_DIR in configs.sh"; exit 1; }
 mkdir -p "$OUTDIR"
 
@@ -46,11 +53,21 @@ echo
 # a per-label .status file so the parallel workers can be tallied after they all
 # finish (a subshell can't increment a counter in the parent).
 fetch_one() {
-  local label=$1 repo=$2
-  if "$LLAMA_BENCH" -hf "$repo" -ngl 0 -p 1 -n 1 -r 1 \
-       > "$OUTDIR/prefetch_${label}.log" 2>&1; then
+  local label=$1 repo=$2 rc
+  if [ -n "$PREFETCH_TIMEOUT" ]; then
+    timeout "$PREFETCH_TIMEOUT" "$LLAMA_BENCH" -hf "$repo" -ngl 0 -p 1 -n 1 -r 1 \
+      > "$OUTDIR/prefetch_${label}.log" 2>&1
+  else
+    "$LLAMA_BENCH" -hf "$repo" -ngl 0 -p 1 -n 1 -r 1 \
+      > "$OUTDIR/prefetch_${label}.log" 2>&1
+  fi
+  rc=$?
+  if [ "$rc" -eq 0 ]; then
     echo OK   > "$OUTDIR/prefetch_${label}.status"
     echo "    OK      $label  ($repo)"
+  elif [ -n "$PREFETCH_TIMEOUT" ] && [ "$rc" -eq 124 ]; then
+    echo FAIL > "$OUTDIR/prefetch_${label}.status"
+    echo "    TIMEOUT $label  ($repo) — no finish within $PREFETCH_TIMEOUT (stalled download?); re-run to resume from cache"
   else
     echo FAIL > "$OUTDIR/prefetch_${label}.status"
     echo "    FAILED  $label  ($repo) — see $OUTDIR/prefetch_${label}.log (bad quant tag? network? disk full?)"
