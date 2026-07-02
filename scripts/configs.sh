@@ -10,8 +10,11 @@ LLAMA_BENCH="$LLAMA_DIR/build/bin/llama-bench"
 LLAMA_SERVER="$LLAMA_DIR/build/bin/llama-server"
 LLAMA_CLI="$LLAMA_DIR/build/bin/llama-cli"
 
-# Where results go.
-OUTDIR="${OUTDIR:-./bench_results}"
+# Where results go. Repo root (not scripts/), resolved absolutely so it's the
+# same dir no matter where a script is invoked from. Each run gets its own
+# self-contained subfolder: $OUTDIR/<run-slug>/ (throughput.csv, versions.txt,
+# RUN.md, json/, quality/). Override by exporting OUTDIR.
+OUTDIR="${OUTDIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/bench_results}"
 
 # OPTIONAL global chat template, applied to every model that doesn't set its own
 # in CONFIGS field 5 (below). Leave empty to use each model's built-in template.

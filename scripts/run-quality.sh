@@ -17,14 +17,16 @@ command -v curl >/dev/null || { echo "Install curl"; exit 1; }
 # A global CHAT_TEMPLATE is optional now (per-model field 5 overrides it; both may be empty).
 [ -z "$CHAT_TEMPLATE" ] || [ -f "$CHAT_TEMPLATE" ] || { echo "CHAT_TEMPLATE set but not found at $CHAT_TEMPLATE"; exit 1; }
 
-mkdir -p prompts "$OUTDIR/quality"
 GEN=768                 # max tokens per answer
 
-# Version-stamp this quality pass alongside the answers, so a set of quality
-# outputs records the exact toolchain that produced it.
+# This quality pass gets its own self-contained run folder ($OUTDIR/<slug>/),
+# so re-runs and different model sets never overwrite each other's answers.
 SLUG=$(run_slug)
-VERSIONS="$OUTDIR/quality/versions_$SLUG.txt"
-REPORT="$OUTDIR/quality/RUN_$SLUG.md"
+RUNDIR="$OUTDIR/$SLUG"
+mkdir -p prompts "$RUNDIR/quality"
+VERSIONS="$RUNDIR/versions.txt"
+REPORT="$RUNDIR/RUN.md"
+# Version-stamp this pass so the answers record the exact toolchain that produced them.
 capture_versions "$VERSIONS" "$LLAMA_SERVER"
 
 # Seed a few example prompts on first run (add your own .txt files anytime).
@@ -40,7 +42,7 @@ start_server() {   # $1 = repo:quant ; remaining args = extra flags (e.g. --n-cp
   "$LLAMA_SERVER" -hf "$repo" \
     -ngl 99 -fa on "$@" \
     -ctk "$KV_QUANT" -ctv "$KV_QUANT" -t "$THREADS" -c 8192 \
-    --host 127.0.0.1 --port "$PORT" > "$OUTDIR/quality/_server.log" 2>&1 &
+    --host 127.0.0.1 --port "$PORT" > "$RUNDIR/_server.log" 2>&1 &
   SRV_PID=$!
   for _ in $(seq 1 600); do                       # wait up to ~20 min for first download
     curl -sf "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 && return 0
@@ -66,11 +68,11 @@ for entry in "${CONFIGS[@]}"; do
     tmpl_flags=(--jinja --chat-template-file "$tmpl")
   fi
 
-  outdir="$OUTDIR/quality/$label"; mkdir -p "$outdir"
+  outdir="$RUNDIR/quality/$label"; mkdir -p "$outdir"
 
   echo ">>> starting $label ..."
   if ! start_server "$repo" "${moe_flags[@]}" "${tmpl_flags[@]}"; then
-    echo "    server failed to start (see $OUTDIR/quality/_server.log) — skipping $label"
+    echo "    server failed to start (see $RUNDIR/_server.log) — skipping $label"
     stop_server; continue
   fi
 
@@ -119,6 +121,7 @@ done
   echo '```'
 } > "$REPORT"
 
-echo; echo "Done. Review answers in $OUTDIR/quality/<label>/*.md"
+echo; echo "Done -> $RUNDIR/"
+echo "    answers:    $RUNDIR/quality/<label>/*.md"
 echo "    provenance: $VERSIONS"
 echo "    report:     $REPORT"

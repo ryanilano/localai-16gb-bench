@@ -42,17 +42,22 @@ nano scripts/configs.sh        # set LLAMA_DIR, then register your models in CON
 
 cd scripts
 ./prefetch.sh                  # downloads your models (run once, slow)
-./run-bench.sh                 # speed + fit sweep -> ../bench_results/throughput_*.csv
-./run-quality.sh               # add your own prompts/*.txt first; outputs -> bench_results/quality/
+./run-bench.sh                 # speed + fit sweep -> ../bench_results/<run>/throughput.csv
+./run-quality.sh               # add your own prompts/*.txt first; outputs -> ../bench_results/<run>/quality/
 ./publish-results.sh           # optional: push bench_results/ to a private GitHub repo (gh CLI)
 ```
 
 Open the CSV in a spreadsheet, sort by `tg_tok_s`, read the quality `.md` files, pick a winner.
 
-Every run is **version-stamped**: alongside each result set it writes a `versions_<run>.txt`
-provenance record (NVIDIA driver, CUDA toolkit, resolved `llama.cpp` binary + git commit, GPU/VRAM,
-power cap, timestamp) and a human-readable `RUN_<run>.md` report — so a result always says exactly
-which toolchain produced it, and a run that lands on the known-bad CUDA 13.2 warns loudly.
+Results live at the repo root under `bench_results/`, and **each run is a self-contained folder**
+named `<date>_<time>-<host>` (e.g. `bench_results/2026-07-02_143000-debianbox/`) holding that run's
+`throughput.csv`, `json/`, `quality/`, and its provenance — so re-runs and different model sets never
+overwrite each other.
+
+Every run is **version-stamped**: each run folder includes a `versions.txt` provenance record (NVIDIA
+driver, CUDA toolkit, resolved `llama.cpp` binary + git commit, GPU/VRAM, power cap, timestamp) and a
+human-readable `RUN.md` report — so a result always says exactly which toolchain produced it, and a run
+that lands on the known-bad CUDA 13.2 warns loudly.
 
 ### Registering a model
 

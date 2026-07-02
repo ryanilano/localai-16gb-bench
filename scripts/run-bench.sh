@@ -14,11 +14,12 @@ command -v jq >/dev/null || { echo "Install jq:  sudo apt install jq"; exit 1; }
 [ -x "$LLAMA_BENCH" ] || { echo "llama-bench not found at $LLAMA_BENCH — set LLAMA_DIR in configs.sh"; exit 1; }
 command -v nvidia-smi >/dev/null || echo "warning: nvidia-smi not found; VRAM column will be blank"
 
-mkdir -p "$OUTDIR/json"
 SLUG=$(run_slug)                             # human-readable, per-run, collision-resistant
-CSV="$OUTDIR/throughput_$SLUG.csv"
-VERSIONS="$OUTDIR/versions_$SLUG.txt"
-REPORT="$OUTDIR/RUN_$SLUG.md"
+RUNDIR="$OUTDIR/$SLUG"                        # this run's self-contained folder — no cross-run collisions
+mkdir -p "$RUNDIR/json"
+CSV="$RUNDIR/throughput.csv"
+VERSIONS="$RUNDIR/versions.txt"
+REPORT="$RUNDIR/RUN.md"
 echo "label,quant,type,depth,pp_tok_s,tg_tok_s,vram_peak_mib,ram_used_peak_mib,status" > "$CSV"
 
 # Version-stamp this run: co-located, per-run file so results are self-documenting
@@ -49,18 +50,18 @@ for entry in "${CONFIGS[@]}"; do
     flag=$(mktemp); memout=$(mktemp); : > "$flag"
     sample_mem "$flag" "$memout" & sampler=$!
 
-    json="$OUTDIR/json/${label}_d${depth}.json"
+    json="$RUNDIR/json/${label}_d${depth}.json"
     if "$LLAMA_BENCH" -hf "$repo" \
          -ngl 99 -fa on "${moe_flags[@]}" \
          -ctk "$KV_QUANT" -ctv "$KV_QUANT" \
          -t "$THREADS" -p "$PROMPT_LEN" -n "$GEN_LEN" -d "$depth" \
-         -r "$REPS" -o json > "$json" 2> "$OUTDIR/json/${label}_d${depth}.log"; then
+         -r "$REPS" -o json > "$json" 2> "$RUNDIR/json/${label}_d${depth}.log"; then
       status=OK
       pp=$(jq -r '[.[]|select(.n_gen==0)][0].avg_ts // empty' "$json")
       tg=$(jq -r '[.[]|select(.n_prompt==0)][0].avg_ts // empty' "$json")
     else
       status=FAIL; pp=""; tg=""
-      echo "      (FAIL — see $OUTDIR/json/${label}_d${depth}.log; likely OOM at this depth)"
+      echo "      (FAIL — see $RUNDIR/json/${label}_d${depth}.log; likely OOM at this depth)"
     fi
 
     rm -f "$flag"; wait "$sampler" 2>/dev/null; read -r vram ram < "$memout"; rm -f "$memout"
@@ -85,7 +86,8 @@ done
   echo '```'
 } > "$REPORT"
 
-echo; echo "=== Done -> $CSV ==="
+echo; echo "=== Done -> $RUNDIR/ ==="
+echo "    csv:        $CSV"
 echo "    provenance: $VERSIONS"
 echo "    report:     $REPORT"
 command -v column >/dev/null && column -s, -t "$CSV" || cat "$CSV"
