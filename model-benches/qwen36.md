@@ -90,6 +90,7 @@ If you want a variant that won't false-refuse on benign agentic, security-resear
 | **Youssofal/Qwen3.6-27B-Abliterated-Heretic-Uncensored** | 27B dense, pure abliteration (no finetune) | low | **0.0282** (lowest) | Q4_K_M, Q3_K_M, Q2_K | ❌ | **Least capability drift** (lowest KLD): closest to stock 27B, just refusals removed. Best "minimal-intervention" 27B. |
 | **llmfan46/…35B-A3B-uncensored-heretic-Native-MTP-Preserved** | 35B-A3B MoE | low | low | i1/K-quants incl. Q4_K | ✅ **MTP heads kept** | **The only uncensored MoE that keeps MTP** → fits the speculative-decoding plan. Top MoE pick for this track. |
 | **fredrezones55/…35B-A3B-Uncensored-HauhauCS-Aggressive** | 35B-A3B MoE | **0/465** | n/a | `Q4_K_P` ("Perfect" custom quants) | ❌ | Most aggressive de-censor; K_P quants claim +1-2 quant levels of quality at +5-15% size. No MTP. |
+| **HauhauCS/Qwen3.6-27B-Uncensored-HauhauCS-Balanced** | 27B dense, abliteration + K_P imatrix quants | low | n/a | `IQ4_XS`, `Q3_K_P`, `IQ3_M` (up to `Q8_K_P`) | ❌ (dense) | **Keeps the reasoning trace**: reasons out loud, adds a short disclaimer, then answers in full — the softest-touch 27B here. Ships an mmproj (vision). IQ4_XS (~15 GB) ≈ stock-27B offload regime; `Q4_K_P` (~18 GB) exceeds 16 GB — skip. |
 | **Youssofal/Qwen3.6-35B-A3B-Abliterated-Heretic** | 35B-A3B MoE | 1/25 | low | Q4_K_M (+Q6/Q8) | ❌ | Straightforward MoE abliteration with matching mmproj. |
 | **mradermacher/…35B-A3B-uncensored-heretic-i1** | 35B-A3B MoE | n/a | n/a | full i1 imatrix ladder | ❌ | Standard mradermacher i1 quants if you want the widest 4-bit spread. |
 
@@ -105,6 +106,10 @@ On llama.cpp, **MTP + vision (`--mmproj`) can't run together yet**, and most Her
 - **35B-A3B (speed + MTP):** llmfan46 MTP-Preserved at Q4_K, expert-offload to RAM like the stock MoE.
 
 > Run these through the **same scripts** as the stock models (just add their lines to `configs.sh`). The KLD numbers are the vendors' own; your Phase C quality pass is what actually decides whether abliteration cost you anything.
+
+### Code-specialized finetunes (separate from the abliteration track)
+
+`DavidAU/Qwen3.6-27B-NEO-CODE-Di-IMatrix-MAX-GGUF` is a code/creative **finetune** of the 27B dense, not an abliteration — so **there is no KLD-vs-base drift proxy** to reason about, and the card's "stronger than base" style claims are not coding evidence (see §closing note). Its only justification is your own Phase-C coding pass. Two practical notes for 16 GB: it's an "IMatrix-**MAX**" repo (embeddings/output kept high-precision), so files run *larger* than a stock tag of the same name — `IQ4_XS` is already ~15.4 GB (stock-27B offload regime), `IQ3_M` (~12.9 GB) fits with KV room, and `Q4_K_M` (~16.9 GB) exceeds 16 GB VRAM. Commented-out lines are in `configs.sh` under the "code-specialized finetune" block.
 
 ---
 
@@ -255,10 +260,16 @@ nano scripts/configs.sh           # set LLAMA_DIR, edit the CONFIGS matrix
 | `27B_Heretic_Youssofal_Q3_K_M` | Q3_K_M | dense | 0-32K | uncensored 3-bit; smaller, fits dense on-GPU *(commented out)* |
 | `27B_Heretic_Youssofal_Q3_K_L`‡ | Q3_K_L | dense | 0-32K | uncensored top-3-bit *(commented out; confirm tag on HF)* |
 | `35B_Heretic_HauhauCS` | Q4_K_P | moe | 0-32K | uncensored MoE *(commented out by default)* |
+| `27B_HauhauCS_Balanced` | IQ4_XS | dense | 0-32K | uncensored 27B, keeps reasoning trace; ships mmproj *(commented out)* |
+| `27B_HauhauCS_Balanced_Q3_K_P` | Q3_K_P | dense | 0-32K | same, ~14 GB for more on-GPU KV room *(commented out)* |
+| `27B_NEO_CODE_IQ4_XS`§ | IQ4_XS | dense | 0-32K | code finetune (not abliteration); ~15.4 GB, stock-27B offload regime *(commented out)* |
+| `27B_NEO_CODE_IQ3_M`§ | IQ3_M | dense | 0-32K | same finetune, ~12.9 GB fits with KV room *(commented out)* |
 
 †Not a 4-bit quant, but `UD-Q3_K_M` (~16.6 GB) is the one config that gets the **MoE mostly into 16 GB VRAM**, worth keeping as the "max-speed, accept slight quality loss" option, and it directly answers the Q3_K_M-vs-Q4 question.
 
 ‡`Q3_K_L` is **not** in Youssofal's documented quant list (§3 shows `Q4_K_M / Q3_K_M / Q2_K`). Confirm the tag exists on the HF repo before running, or point the config line at an uploader that ships a top-3-bit 27B. `Q3_K_M` (the row above it) is grounded.
+
+§`NEO_CODE` is a **finetune**, not an abliteration — no KLD drift proxy, so it lives in its own `configs.sh` block and is justified only by your Phase-C coding pass (see §3, "Code-specialized finetunes"). Both its tags (`IQ4_XS`, `IQ3_M`) are on DavidAU's HF repo; `Q4_K_M` (~16.9 GB) exceeds 16 GB VRAM and is intentionally omitted.
 
 ---
 

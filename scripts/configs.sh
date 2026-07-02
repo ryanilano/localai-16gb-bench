@@ -91,4 +91,19 @@ CONFIGS=(
   # "27B_Heretic_Youssofal_Q3_K_M|Youssofal/Qwen3.6-27B-Abliterated-Heretic-Uncensored-GGUF:Q3_K_M|dense||../templates/qwen36-froggeric-v20.jinja"
   # "27B_Heretic_Youssofal_Q3_K_L|Youssofal/Qwen3.6-27B-Abliterated-Heretic-Uncensored-GGUF:Q3_K_L|dense||../templates/qwen36-froggeric-v20.jinja"  # [NEEDS SOURCE: confirm Q3_K_L on HF]
   # "35B_Heretic_HauhauCS|fredrezones55/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive:Q4_K_P|moe||../templates/qwen36-froggeric-v20.jinja"
+  # HauhauCS "Balanced" 27B dense: abliteration + K_P imatrix quants that KEEP the reasoning
+  #   trace (reasons out loud, adds a short disclaimer, then answers in full). Ships an mmproj
+  #   (vision). IQ4_XS (~15 GB) is the apples-to-apples quant vs stock 27B; Q3_K_P (~14 GB) /
+  #   IQ3_M (~13 GB) leave more KV room on-GPU. Q4_K_P (~18 GB) exceeds 16 GB VRAM — skip.
+  # "27B_HauhauCS_Balanced|HauhauCS/Qwen3.6-27B-Uncensored-HauhauCS-Balanced:IQ4_XS|dense||../templates/qwen36-froggeric-v20.jinja"
+  # "27B_HauhauCS_Balanced_Q3_K_P|HauhauCS/Qwen3.6-27B-Uncensored-HauhauCS-Balanced:Q3_K_P|dense||../templates/qwen36-froggeric-v20.jinja"
+
+  # --- code-specialized finetune (experimental — NOT abliteration; judge on Phase-C coding pass, not card claims) ---
+  # DavidAU NEO-CODE 27B dense: a code/creative FINETUNE with "IMatrix-MAX" quants (embeddings/
+  #   output kept high-precision -> files run larger than a stock tag of the same name). Unlike the
+  #   Heretic track there is no KLD drift proxy here, so its only justification is your own coding
+  #   quality pass. IQ4_XS (~15.4 GB) matches the stock-27B offload regime; IQ3_M (~12.9 GB) fits
+  #   with KV room. Q4_K_M (~16.9 GB) exceeds 16 GB VRAM — heavy offload, skip.
+  # "27B_NEO_CODE_IQ4_XS|DavidAU/Qwen3.6-27B-NEO-CODE-Di-IMatrix-MAX-GGUF:IQ4_XS|dense|You are Qwen, created by Alibaba Cloud. You are a helpful assistant.|../templates/qwen36-froggeric-v20.jinja"
+  # "27B_NEO_CODE_IQ3_M|DavidAU/Qwen3.6-27B-NEO-CODE-Di-IMatrix-MAX-GGUF:IQ3_M|dense|You are Qwen, created by Alibaba Cloud. You are a helpful assistant.|../templates/qwen36-froggeric-v20.jinja"
 )
