@@ -79,9 +79,9 @@ chmod +x prefetch.sh run-bench.sh run-quality.sh
 
 Edit `configs.sh`:
 
-- [ ] Set `LLAMA_DIR` to your llama.cpp checkout (the folder containing `build/bin/`).
-- [ ] (Optional) Set `LLAMA_CACHE` to a big disk if you don't want GGUFs in `~/.cache`.
-- [ ] **Register your models in `CONFIGS`.** Each line is 5 pipe-delimited fields (fields 4-5
+- [x] Set `LLAMA_DIR` to your llama.cpp checkout (the folder containing `build/bin/`).
+- [x] (Optional) Set `LLAMA_CACHE` to a big disk if you don't want GGUFs in `~/.cache`.
+- [x] **Register your models in `CONFIGS`.** Each line is 5 pipe-delimited fields (fields 4-5
       optional): `label|hf_repo:quant|type(dense|moe)|system_prompt|chat_template_path`. The repo
       ships model-neutral, so **all lines are commented out**. Uncomment the Qwen3.6 example block to
       reproduce the worked example, or add your own model lines (see `benchmark-methodology.md`,
@@ -171,7 +171,6 @@ on _(see model-benches/qwen36.md §10)_:
 - **Daily driver:** `35B_UD-IQ4_NL_XL` (MoE, expert-offload): fastest, most responsive.
 - **Coding/quality model:** `27B_IQ4_XS` (fits on GPU).
 - **Max-speed MoE fallback:** `35B_UD-Q3_K_M` (mostly in VRAM, slight quality loss).
-
 - [ ] Pick the winner. If two are close, prefer the one with more context headroom (lower VRAM at your max depth).
 
 ---
@@ -190,7 +189,14 @@ If you picked a MoE model, claw back speed by moving experts onto the GPU until 
 
 Only if you want a variant that won't false-refuse inside the sandbox _(see model-benches/qwen36.md §3)_:
 
-- [ ] Uncomment the Heretic lines in `configs.sh` (or add others from §3).
+- [ ] Uncomment the Heretic/uncensored lines in `configs.sh` (or add others from §3). Options include
+      the Youssofal 27B (lowest KLD) and **`27B_HauhauCS_Balanced`** (softest-touch 27B: keeps the
+      reasoning trace, ships an mmproj). Use `IQ4_XS` for the stock-27B offload regime, or a 3-bit tag
+      for more on-GPU KV room; the ~18 GB `Q4_K_P` overflows 16 GB — skip it.
+- [ ] **Code finetune (separate, experimental):** `27B_NEO_CODE_*` (DavidAU) is a code-specialized
+      _finetune_, not an abliteration — it has no KLD drift proxy, so judge it **only** on the Step 6
+      coding outputs. `IQ4_XS` (~15.4 GB) matches the stock-27B offload regime; `IQ3_M` (~12.9 GB) fits
+      with KV room; the ~16.9 GB `Q4_K_M` overflows 16 GB.
 - [ ] Re-run `run-bench.sh` and `run-quality.sh`; they flow through the same pipeline.
 - [ ] Judge on the **Step 6 quality outputs**, not the vendors' refusal/KLD numbers.
 - [ ] Keep these models on the **isolated sandbox VLAN**, never LAN-exposed.
@@ -208,13 +214,13 @@ Only if you want a variant that won't false-refuse inside the sandbox _(see mode
 
 ### Quick reference: what each artifact is for
 
-| File                                  | Purpose                                                          |
-| ------------------------------------- | ---------------------------------------------------------------- |
-| `INSTALL.md`                          | This runbook; do it in order.                                    |
-| `benchmark-methodology.md`            | The "why": the loop, reading the CSV, dense-vs-MoE, add a model. |
-| `model-benches/qwen36.md`             | Worked example: analysis, quant ranking, caveats, results.       |
-| `scripts/configs.sh`                  | The one file you edit: models, depths, paths, offload.           |
-| `scripts/prefetch.sh`                 | Download all models up front (run once, before the sweep).       |
-| `scripts/run-bench.sh`                | Unattended speed + fit sweep → CSV.                              |
-| `scripts/run-quality.sh`              | Unattended quality outputs → markdown per model.                 |
-| `templates/*.jinja`                   | Optional per-model chat templates (e.g. the Qwen3.6 example).    |
+| File                       | Purpose                                                          |
+| -------------------------- | ---------------------------------------------------------------- |
+| `INSTALL.md`               | This runbook; do it in order.                                    |
+| `benchmark-methodology.md` | The "why": the loop, reading the CSV, dense-vs-MoE, add a model. |
+| `model-benches/qwen36.md`  | Worked example: analysis, quant ranking, caveats, results.       |
+| `scripts/configs.sh`       | The one file you edit: models, depths, paths, offload.           |
+| `scripts/prefetch.sh`      | Download all models up front (run once, before the sweep).       |
+| `scripts/run-bench.sh`     | Unattended speed + fit sweep → CSV.                              |
+| `scripts/run-quality.sh`   | Unattended quality outputs → markdown per model.                 |
+| `templates/*.jinja`        | Optional per-model chat templates (e.g. the Qwen3.6 example).    |
