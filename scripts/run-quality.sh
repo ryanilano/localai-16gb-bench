@@ -9,6 +9,7 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 source ./configs.sh
+source ./versions.sh
 
 command -v jq >/dev/null   || { echo "Install jq:  sudo apt install jq"; exit 1; }
 command -v curl >/dev/null || { echo "Install curl"; exit 1; }
@@ -18,6 +19,13 @@ command -v curl >/dev/null || { echo "Install curl"; exit 1; }
 
 mkdir -p prompts "$OUTDIR/quality"
 GEN=768                 # max tokens per answer
+
+# Version-stamp this quality pass alongside the answers, so a set of quality
+# outputs records the exact toolchain that produced it.
+SLUG=$(run_slug)
+VERSIONS="$OUTDIR/quality/versions_$SLUG.txt"
+REPORT="$OUTDIR/quality/RUN_$SLUG.md"
+capture_versions "$VERSIONS" "$LLAMA_SERVER"
 
 # Seed a few example prompts on first run (add your own .txt files anytime).
 if ! ls prompts/*.txt >/dev/null 2>&1; then
@@ -44,6 +52,7 @@ start_server() {   # $1 = repo:quant ; remaining args = extra flags (e.g. --n-cp
 
 stop_server() { kill "$SRV_PID" 2>/dev/null; wait "$SRV_PID" 2>/dev/null; sleep 2; }
 
+ran_labels=()   # models actually exercised this pass, for the run report
 for entry in "${CONFIGS[@]}"; do
   IFS='|' read -r label repo type sys tmpl <<< "$entry"
   moe_flags=(); [ "$type" = "moe" ] && moe_flags=(--n-cpu-moe "$NCMOE_ALL")
@@ -84,6 +93,32 @@ for entry in "${CONFIGS[@]}"; do
   done
 
   stop_server
+  ran_labels+=("$label -> $repo")
 done
 
+# Human-readable report: provenance stamp + which models/prompts this pass ran.
+{
+  echo "# Quality run — $SLUG"
+  echo
+  echo "## Models"
+  echo
+  if [ "${#ran_labels[@]}" -gt 0 ]; then
+    for l in "${ran_labels[@]}"; do echo "- $l"; done
+  else
+    echo "- (none — no active CONFIGS)"
+  fi
+  echo
+  echo "## Prompts"
+  echo
+  for pf in prompts/*.txt; do echo "- $(basename "$pf")"; done
+  echo
+  echo "## Provenance"
+  echo
+  echo '```'
+  cat "$VERSIONS"
+  echo '```'
+} > "$REPORT"
+
 echo; echo "Done. Review answers in $OUTDIR/quality/<label>/*.md"
+echo "    provenance: $VERSIONS"
+echo "    report:     $REPORT"

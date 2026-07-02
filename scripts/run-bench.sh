@@ -8,15 +8,22 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 source ./configs.sh
+source ./versions.sh
 
 command -v jq >/dev/null || { echo "Install jq:  sudo apt install jq"; exit 1; }
 [ -x "$LLAMA_BENCH" ] || { echo "llama-bench not found at $LLAMA_BENCH — set LLAMA_DIR in configs.sh"; exit 1; }
 command -v nvidia-smi >/dev/null || echo "warning: nvidia-smi not found; VRAM column will be blank"
 
 mkdir -p "$OUTDIR/json"
-STAMP=$(date +%Y%m%d_%H%M%S)
-CSV="$OUTDIR/throughput_$STAMP.csv"
+SLUG=$(run_slug)                             # human-readable, per-run, collision-resistant
+CSV="$OUTDIR/throughput_$SLUG.csv"
+VERSIONS="$OUTDIR/versions_$SLUG.txt"
+REPORT="$OUTDIR/RUN_$SLUG.md"
 echo "label,quant,type,depth,pp_tok_s,tg_tok_s,vram_peak_mib,ram_used_peak_mib,status" > "$CSV"
+
+# Version-stamp this run: co-located, per-run file so results are self-documenting
+# and a later run never clobbers this one's provenance.
+capture_versions "$VERSIONS" "$LLAMA_BENCH"
 
 # Background peak-memory sampler: runs while flag file $1 exists; writes "maxv maxr" to $2.
 sample_mem() {
@@ -63,5 +70,22 @@ for entry in "${CONFIGS[@]}"; do
   done
 done
 
+# Human-readable report: provenance stamp + the throughput CSV as a markdown table.
+{
+  echo "# Benchmark run — $SLUG"
+  echo
+  echo "## Results"
+  echo
+  csv_to_md "$CSV"
+  echo
+  echo "## Provenance"
+  echo
+  echo '```'
+  cat "$VERSIONS"
+  echo '```'
+} > "$REPORT"
+
 echo; echo "=== Done -> $CSV ==="
+echo "    provenance: $VERSIONS"
+echo "    report:     $REPORT"
 command -v column >/dev/null && column -s, -t "$CSV" || cat "$CSV"

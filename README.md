@@ -44,9 +44,15 @@ cd scripts
 ./prefetch.sh                  # downloads your models (run once, slow)
 ./run-bench.sh                 # speed + fit sweep -> ../bench_results/throughput_*.csv
 ./run-quality.sh               # add your own prompts/*.txt first; outputs -> bench_results/quality/
+./publish-results.sh           # optional: push bench_results/ to a private GitHub repo (gh CLI)
 ```
 
 Open the CSV in a spreadsheet, sort by `tg_tok_s`, read the quality `.md` files, pick a winner.
+
+Every run is **version-stamped**: alongside each result set it writes a `versions_<run>.txt`
+provenance record (NVIDIA driver, CUDA toolkit, resolved `llama.cpp` binary + git commit, GPU/VRAM,
+power cap, timestamp) and a human-readable `RUN_<run>.md` report — so a result always says exactly
+which toolchain produced it, and a run that lands on the known-bad CUDA 13.2 warns loudly.
 
 ### Registering a model
 
