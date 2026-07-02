@@ -40,40 +40,31 @@ RESULTS_DIR="${RESULTS_DIR:-$(dirname "$PROJECT_ROOT")/localai-16gb-bench-result
 REPO="${RESULTS_REPO:-$(basename "$RESULTS_DIR")}"
 MSG="${1:-results: sync $(date +%Y-%m-%d_%H%M%S) from $(hostname -s 2>/dev/null || hostname)}"
 
-mkdir -p "$RESULTS_DIR"
+# Ensure the private GitHub repo exists (create if missing) and get its HTTPS URL.
+if [[ "$REPO" == */* ]]; then full="$REPO"; else full="$(gh api user -q .login)/$REPO"; fi
+if ! gh repo view "$full" >/dev/null 2>&1; then
+  echo "Creating private repo $full ..."
+  gh repo create "$full" --private --disable-wiki -d "Benchmark results" >/dev/null
+fi
+# HTTPS URL (matches gh's default protocol; authenticated via the gh token, so it
+# works on a box with no SSH keys).
+url="$(gh repo view "$full" --json url -q .url).git"
+
+# Work from a checkout whose tree MATCHES the remote, so publishing only ADDS
+# result files and never deletes anything already on the remote (README, prior
+# run folders). Cloning/pulling is what makes this safe — a bare `git init` +
+# `git add -A` would record every remote-only file as a deletion.
+if [ ! -d "$RESULTS_DIR/.git" ]; then
+  echo "Cloning $full -> $RESULTS_DIR ..."
+  git clone -q "$url" "$RESULTS_DIR"   # creates the dir; works for empty repos too
+fi
 cd "$RESULTS_DIR"
-
-# Initialize the results repo on first publish.
-if [ ! -d .git ]; then
-  echo "Initializing results repo in $RESULTS_DIR ..."
-  git init -q
-  git symbolic-ref HEAD refs/heads/main
-fi
-
-# Ensure a private GitHub repo exists and is wired up as 'origin'.
-if ! git remote get-url origin >/dev/null 2>&1; then
-  if [[ "$REPO" == */* ]]; then full="$REPO"; else full="$(gh api user -q .login)/$REPO"; fi
-  if gh repo view "$full" >/dev/null 2>&1; then
-    echo "Linking existing private repo $full ..."
-  else
-    echo "Creating private repo $full ..."
-    gh repo create "$full" --private --disable-wiki -d "Benchmark results" >/dev/null
-  fi
-  # HTTPS remote (matches gh's default protocol; authenticated via the gh token,
-  # so it works on a box with no SSH keys).
-  git remote add origin "$(gh repo view "$full" --json url -q .url).git"
-fi
-
-# Adopt any existing remote history so our commit fast-forwards cleanly. This
-# covers both a fresh local repo whose remote already has commits (e.g. an
-# initial README) and a local branch that diverged from a prior partial run.
-# --soft moves HEAD to the remote tip while leaving the working tree intact, so
-# our result files simply re-stage on top of it.
+git remote set-url origin "$url" 2>/dev/null || git remote add origin "$url"
+# Fast-forward the working tree to the latest remote state before adding. This
+# self-heals a stale checkout and guarantees add-only publishes.
 git fetch -q origin 2>/dev/null || true
-if git rev-parse -q --verify origin/main >/dev/null 2>&1; then
-  git reset -q --soft origin/main
-  git branch -q -u origin/main main 2>/dev/null || true
-fi
+git checkout -q main 2>/dev/null || git checkout -q -b main
+git merge -q --ff-only origin/main 2>/dev/null || true
 
 # Copy result files in (never delete from the archive: --ignore-existing keeps
 # the archive append-only, so a re-run can't clobber an earlier run's outputs).
