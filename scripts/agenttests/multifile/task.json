@@ -1,0 +1,5 @@
+{
+  "user": "The `shapes` package has failing tests in test_shapes.py — exactly ONE shape class computes its area incorrectly; the others are correct. Use the tools to explore the package, find the file with the bug, fix only that file, and run `python3 -m unittest test_shapes` to confirm all tests pass. Do not edit test_shapes.py. Reply DONE when every test passes.",
+  "max_turns": 15,
+  "check": "python3 -m unittest test_shapes"
+}
