@@ -18,11 +18,14 @@ command -v curl >/dev/null || { echo "Install curl"; exit 1; }
 [ -z "$CHAT_TEMPLATE" ] || [ -f "$CHAT_TEMPLATE" ] || { echo "CHAT_TEMPLATE set but not found at $CHAT_TEMPLATE"; exit 1; }
 
 # Max tokens per answer. These Qwen3.6 models are REASONING models: they emit a long
-# thinking phase (routed to reasoning_content) before the final answer. 768 is far too
-# small — the model burns the whole budget thinking and never reaches the answer, leaving
-# content empty (blank .md). 2048 gives room to think AND answer; bump higher for very
-# hard prompts. Env-overridable: GEN=4096 ./run-quality.sh
-GEN="${GEN:-2048}"
+# thinking phase (routed to reasoning_content) before the final answer. 768 was far too
+# small (blank .md); 2048 still truncated 12/18 answers in 2026-07-03_041809 — the think
+# phase alone exceeds it on the harder prompts (debug, refactor, multi-step plans). 4096
+# fits the short prompts and most reasoning traces within the default QCTX=8192 (4096 +
+# prompt < 8192). For a deep MoE quality pass, drive it higher and widen the window too:
+# GEN=8192 QCTX=16384 ./run-quality.sh — but keep QCTX modest for VRAM-bound dense quants
+# (27B_IQ4_XS OOMs on KV even at 8192). Env-overridable.
+GEN="${GEN:-4096}"
 # Server context window for the quality pass. Default 8192 is ample for the short
 # prompts in prompts/ (each answers well inside GEN tokens) and keeps every model's
 # KV small so all fit. Override for a one-off long-context quality probe, e.g.
