@@ -117,7 +117,13 @@ CONFIGS=(
   "27B_IQ4_XS|unsloth/Qwen3.6-27B-GGUF:IQ4_XS|dense|You are Qwen, created by Alibaba Cloud. You are a helpful assistant.|../templates/qwen36-froggeric-v20.jinja"
   # "27B_UD-Q4_K_XL|unsloth/Qwen3.6-27B-GGUF:UD-Q4_K_XL|dense|You are Qwen, created by Alibaba Cloud. You are a helpful assistant.|../templates/qwen36-froggeric-v20.jinja"
   # --- stock 35B-A3B MoE ---
-  "35B_UD-IQ4_NL_XL|unsloth/Qwen3.6-35B-A3B-GGUF:UD-IQ4_NL_XL|moe|You are Qwen, created by Alibaba Cloud. You are a helpful assistant.|../templates/qwen36-froggeric-v20.jinja"
+  # DROPPED 35B_UD-IQ4_NL_XL: quality-broken. Loads and benches OK, but with experts on
+  #   CPU (--n-cpu-moe 99, the only regime that fits 16 GB) it emits a degenerate '/'x2048
+  #   loop for EVERY prompt — byte-identical output regardless of input (run 2026-07-03_
+  #   040949). Root cause is the IQ4_NL expert dequant path on CPU in this build (9859);
+  #   it was also the one anomalous quant in throughput (prefill swinging 345<->595 t/s).
+  #   Its tok/s numbers measure garbage, so removed. Use UD-Q4_K_XL / UD-Q3_K_M instead.
+  # "35B_UD-IQ4_NL_XL|unsloth/Qwen3.6-35B-A3B-GGUF:UD-IQ4_NL_XL|moe|You are Qwen, created by Alibaba Cloud. You are a helpful assistant.|../templates/qwen36-froggeric-v20.jinja"
   "35B_UD-Q4_K_XL|unsloth/Qwen3.6-35B-A3B-GGUF:UD-Q4_K_XL|moe|You are Qwen, created by Alibaba Cloud. You are a helpful assistant.|../templates/qwen36-froggeric-v20.jinja"
   "35B_UD-Q3_K_M|unsloth/Qwen3.6-35B-A3B-GGUF:UD-Q3_K_M|moe|You are Qwen, created by Alibaba Cloud. You are a helpful assistant.|../templates/qwen36-froggeric-v20.jinja"
 
