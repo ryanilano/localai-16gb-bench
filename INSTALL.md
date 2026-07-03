@@ -161,14 +161,26 @@ First, **replace the seed prompts with your real tasks**. This is the step that 
       (one task per file; the first run seeds 3 examples you can overwrite).
 
 ```bash
-./run-quality.sh
+./run-quality.sh                       # default 8k context (~30-60 min)
+# — or, for a long-context quality probe —
+QCTX=81920 ./run-quality.sh            # answer at depth; keep QCTX inside the fit map (see below)
 ```
 
-**What happens:** for each quant it starts `llama-server` (with the fixed tool-call template),
-answers every prompt, and saves `bench_results/quality/<label>/<prompt>.md`, then moves on.
+**What happens:** for each quant it starts `llama-server` text-only (`--no-mmproj`, with that model's
+own chat template + system prompt if set), answers every prompt through `/v1/chat/completions`, and
+saves `bench_results/<run-slug>/quality/<label>/<prompt>.md`, then moves on. A config that can't hold
+full offload is retried once at `-ngl -1` (auto-fit) so it still yields answers instead of a blank dir.
+
+**Context window (`QCTX`).** Defaults to 8192 — ample for the short prompts here and small enough that
+every model's KV fits. To probe quality _at depth_, set `QCTX` to a depth the throughput sweep proved
+loads (Step 5 `throughput.csv` — e.g. ≤80k dense, higher for MoE). Unlike the bench, a too-large `QCTX`
+**OOMs `llama-server` on boot** and that config logs "no response" for every prompt — so never exceed
+the fit map.
 
 - [ ] Read the `.md` outputs side by side. Look for: correct code, coherent reasoning,
       clean tool-call XML, no degradation vs the larger quants.
+- [ ] If a config's answers are all "(no response — see _server.log)", check its
+      `quality/<label>/_server.log` — usually a boot OOM (drop `QCTX`, or set a lower `-ngl` in field 6).
 
 ---
 
