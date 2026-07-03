@@ -18,6 +18,12 @@ command -v curl >/dev/null || { echo "Install curl"; exit 1; }
 [ -z "$CHAT_TEMPLATE" ] || [ -f "$CHAT_TEMPLATE" ] || { echo "CHAT_TEMPLATE set but not found at $CHAT_TEMPLATE"; exit 1; }
 
 GEN=768                 # max tokens per answer
+# Server context window for the quality pass. Default 8192 is ample for the short
+# prompts in prompts/ (each answers well inside GEN tokens) and keeps every model's
+# KV small so all fit. Override for a one-off long-context quality probe, e.g.
+# QCTX=81920 ./run-quality.sh — but the model must be validated to that depth (see
+# the fit map / throughput.csv) or the server will OOM on boot. Env-overridable.
+QCTX="${QCTX:-8192}"
 
 # This quality pass gets its own self-contained run folder ($OUTDIR/<slug>/),
 # so re-runs and different model sets never overwrite each other's answers.
@@ -41,7 +47,7 @@ start_server() {   # $1 = repo:quant ; remaining args = extra flags (e.g. --n-cp
   local repo="$1"; shift
   "$LLAMA_SERVER" -hf "$repo" \
     -ngl 99 -fa on "$@" \
-    -ctk "$KV_QUANT" -ctv "$KV_QUANT" -t "$THREADS" -c 8192 \
+    -ctk "$KV_QUANT" -ctv "$KV_QUANT" -t "$THREADS" -c "$QCTX" \
     --host 127.0.0.1 --port "$PORT" > "$RUNDIR/_server.log" 2>&1 &
   SRV_PID=$!
   for _ in $(seq 1 600); do                       # wait up to ~20 min for first download
