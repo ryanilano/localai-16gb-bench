@@ -1,0 +1,11 @@
+Implement an LRU (least-recently-used) cache in Python as a class named exactly `LRUCache`, using only the standard library (no third-party dependencies). Match this API and its semantics EXACTLY:
+
+- `LRUCache(capacity: int)` — capacity is >= 1.
+- `get(self, key)` -> the stored value, or None if the key is absent. A successful get marks the key as most-recently-used.
+- `put(self, key, value)` -> None. Inserts or updates the key and marks it most-recently-used. If inserting a NEW key would exceed capacity, first evict the least-recently-used key.
+- `peek(self, key)` -> the stored value, or None if absent. peek MUST NOT change recency (this is the opposite of get).
+- `__len__(self)` -> the current number of cached items.
+
+`get` and `put` must be O(1) average time.
+
+Respond with a SINGLE Python code block containing ONLY the implementation of `LRUCache` — no example usage, no tests, no prose before or after.
