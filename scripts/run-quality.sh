@@ -51,6 +51,10 @@ fi
 
 start_server() {   # $1 = repo:quant ; remaining args = extra flags (e.g. --n-cpu-moe, --jinja ...)
   local repo="$1"; shift
+  # A stale llama-server from a crashed prior run (or an OOM'd first boot) can still hold
+  # $PORT, making bind fail ("couldn't bind HTTP server socket"). We run exactly one server
+  # at a time, so clear any lingering llama-server before binding.
+  if pkill -f "$LLAMA_SERVER" 2>/dev/null; then echo "    cleared a stale llama-server before binding :$PORT"; sleep 2; fi
   # --no-mmproj: these Qwen3.6 GGUF repos ship a vision projector that the -hf
   # resolver auto-loads. On a 16 GB card the CLIP buffer (~888 MiB) OOMs *after*
   # the model is fully offloaded, crashing the server on boot (every answer then

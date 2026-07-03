@@ -73,7 +73,7 @@ if [[ "${BENCH_PROFILE:-}" == "longctx" ]]; then
 fi
 KV_QUANT="q8_0"                    # KV cache type (q8_0 halves KV vs f16)
 THREADS=8                          # physical cores to use (tune to your CPU)
-PORT=8080                          # llama-server port for the quality pass
+PORT="${PORT:-8080}"               # llama-server port for the quality pass (env-overridable: PORT=8099 ./run-quality.sh)
 PREFETCH_JOBS="${PREFETCH_JOBS:-3}" # parallel downloads in prefetch.sh; 2-4 is usually best
                                    # (more just thrashes the disk / trips HF rate limits).
                                    # Env-overridable: PREFETCH_JOBS=4 ./prefetch.sh
