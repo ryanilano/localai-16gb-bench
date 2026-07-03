@@ -1,8 +1,13 @@
 # Benchmark outputs (CSV, per-run json/logs, quality markdown)
 bench_results/
+bench-results/
+
+# Python bytecode
+__pycache__/
 
 # Local scratch / agent memory
 .local/
+plans/
 
 # macOS
 .DS_Store
