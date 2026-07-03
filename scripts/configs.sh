@@ -159,7 +159,12 @@ CONFIGS=(
   #   • Youssofal Q4_K_M (bare) and Q3_K_L — Q3_K_L isn't published (-hf: "no GGUF files found");
   #     Q4_K_M never loaded. Use Q3_K_M below for on-GPU 3-bit Heretic.
   #   • 35B HauhauCS-Aggressive Q4_K_P — gated repo (HTTP 401 without HF_TOKEN) AND ~18 GB > 16 GB VRAM.
-  "27B_Heretic_Youssofal_Q3_K_M|Youssofal/Qwen3.6-27B-Abliterated-Heretic-Uncensored-GGUF:Q3_K_M|dense||../templates/qwen36-froggeric-v20.jinja"
+  # DROPPED 27B_Heretic_Youssofal_Q3_K_M: chronic over-thinker. On the quality pass it
+  #   truncated 4/9 (055350) and BAILED on the tool-call prompt — a disqualifier for the
+  #   chat+agent (OpenClaude / Hermes) workload, where burned think-tokens add latency AND
+  #   eat the output cap, breaking multi-turn tool loops. Cut from the down-select rather
+  #   than spend GPU. Re-enable only to re-probe over-thinking with a hard think cap.
+  # "27B_Heretic_Youssofal_Q3_K_M|Youssofal/Qwen3.6-27B-Abliterated-Heretic-Uncensored-GGUF:Q3_K_M|dense||../templates/qwen36-froggeric-v20.jinja"
   # HauhauCS "Balanced" 27B dense: abliteration + K_P imatrix quants that KEEP the reasoning
   #   trace (reasons out loud, adds a short disclaimer, then answers in full). Ships an mmproj
   #   (vision). IQ4_XS (~15 GB) is the apples-to-apples quant vs stock 27B; Q3_K_P (~14 GB) /
