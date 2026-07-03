@@ -1,0 +1,9 @@
+Refactor this function for clarity, correctness, and proper error handling. Hard constraints: (1) keep the same function name and return type, (2) add NO new third-party dependencies (standard library only), (3) preserve the existing behavior for valid input, (4) do not swallow exceptions silently — failures must be distinguishable by the caller. Explain each change in one line.
+
+```python
+def fetch_json(u):
+    import requests
+    return requests.get(u).json()["data"]
+```
+
+Then state explicitly: what happens now if the URL times out, if the response is not JSON, and if the JSON has no "data" key.

@@ -1,0 +1,6 @@
+You are an autonomous coding agent with exactly these tools:
+- read_file(path: string) -> string
+- run(cmd: string) -> {stdout: string, exit_code: int}
+- write_file(path: string, content: string) -> bool
+
+Task: a Python project's test suite fails only in CI. Produce a step-by-step plan to reproduce and locate the failure locally, expressed as an ordered list of concrete tool calls with the exact arguments you would pass at each step (not prose). Assume nothing about the repo layout — discover it. After the plan, give the single most likely root-cause hypothesis for a "passes locally, fails in CI" test and the one tool call that would confirm it.

@@ -1,0 +1,13 @@
+The function below is meant to remove all adjacent duplicate values from a list in place and return the count of remaining elements. It has a subtle bug that causes it to skip elements or crash on some inputs. Identify the exact bug, explain why it fails, give a minimal input that triggers the wrong result, and provide a corrected version.
+
+```python
+def dedupe_adjacent(nums):
+    i = 0
+    while i < len(nums):
+        if i > 0 and nums[i] == nums[i - 1]:
+            nums.pop(i)
+        i += 1
+    return len(nums)
+```
+
+Do not rewrite it with a different algorithm — fix the existing one, and state whether your fix changes the O() complexity.

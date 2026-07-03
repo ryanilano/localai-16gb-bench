@@ -140,4 +140,11 @@ CONFIGS=(
   #   with KV room. Q4_K_M (~16.9 GB) exceeds 16 GB VRAM — heavy offload, skip.
   "27B_NEO_CODE_IQ4_XS|DavidAU/Qwen3.6-27B-NEO-CODE-Di-IMatrix-MAX-GGUF:IQ4_XS|dense|You are Qwen, created by Alibaba Cloud. You are a helpful assistant.|../templates/qwen36-froggeric-v20.jinja"
   "27B_NEO_CODE_IQ3_M|DavidAU/Qwen3.6-27B-NEO-CODE-Di-IMatrix-MAX-GGUF:IQ3_M|dense|You are Qwen, created by Alibaba Cloud. You are a helpful assistant.|../templates/qwen36-froggeric-v20.jinja"
+
+  # --- Heretic-Uncensored FINETUNE of the NEO-CODE line (dense 27B) ---
+  # Abliterated finetune of NEO-CODE; benched (2026-07-03_004208) performance-identical to base
+  #   NEO-CODE (±0.2 tg, ±12 MiB, same fit wall). IQ3_M is the served daily driver (serve-27b-
+  #   uncensored.sh); IQ4_XS is here to settle the IQ3-vs-IQ4 fidelity question on the coding pass.
+  "27B_Heretic_NEO_CODE_IQ3_M|DavidAU/Qwen3.6-27B-Heretic-Uncensored-FINETUNE-NEO-CODE-Di-IMatrix-MAX-GGUF:IQ3_M|dense|You are Qwen, created by Alibaba Cloud. You are a helpful assistant.|../templates/qwen36-froggeric-v20.jinja"
+  "27B_Heretic_NEO_CODE_IQ4_XS|DavidAU/Qwen3.6-27B-Heretic-Uncensored-FINETUNE-NEO-CODE-Di-IMatrix-MAX-GGUF:IQ4_XS|dense|You are Qwen, created by Alibaba Cloud. You are a helpful assistant.|../templates/qwen36-froggeric-v20.jinja"
 )
