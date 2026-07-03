@@ -129,13 +129,21 @@ each file isn't corrupt. No GPU needed; mmap keeps RAM low. Already-cached model
 
 ```bash
 tmux new -s bench          # so it survives an SSH drop
-./run-bench.sh
+./run-bench.sh                          # default sweep: depths 0-32k (~18-60 min)
+# — or, for the deep context sweep —
+BENCH_PROFILE=longctx ./run-bench.sh    # dense→80k, MoE→256K native (~1.25-1.5 hr)
 # detach: Ctrl-b then d   |   reattach: tmux attach -t bench
 ```
 
 **What happens:** for every quant × depth it loads from cache (Step 4 already downloaded them),
 runs `llama-bench`, samples peak VRAM/RAM, and appends a row to `bench_results/throughput_<stamp>.csv`.
 OOM at a depth just writes `status=FAIL` and continues.
+
+**Depth profiles.** The default profile sweeps `0 4096 8192 16384 32768`. Setting
+`BENCH_PROFILE=longctx` sweeps deeper — dense configs to 80k (their VRAM ceiling on 16 GB) and MoE
+configs to the full 256K native window (experts live in RAM, so only attention KV sits on the GPU).
+Both arrays live in `configs.sh` (`DEPTHS` / `DEPTHS_MOE`); edit them to customize. The longctx run is
+much slower because the deep MoE rungs each prefill ~200K+ tokens — expect ~1.25-1.5 hr.
 
 - [ ] Script finishes and prints a results table.
 - [ ] Open the CSV in a spreadsheet. **Decisions to make from it:**
