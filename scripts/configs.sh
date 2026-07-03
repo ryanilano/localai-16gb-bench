@@ -99,11 +99,12 @@ NCMOE_ALL=99
 # Adding a model = adding one line here; it flows through prefetch → bench → quality
 # unchanged. Drop any per-model template in ../templates/. Comment a line to skip it.
 #
-# ACTIVE SET: the Qwen3.6 16 GB sweep (9 configs) is uncommented and runs off `main`,
+# ACTIVE SET: the Qwen3.6 16 GB sweep (11 configs) is uncommented and runs off `main`,
 # so the bench box needs NO local edits — a plain `git pull` stays conflict-free. To go
-# back to model-neutral, re-comment the lines below. The gated 35B_Heretic_HauhauCS line
-# stays commented (needs an HF_TOKEN — see the Secrets block above and ../model-benches/
-# qwen36.md §3). The 27B_UD-Q4_K_XL example is left commented (not part of the sweep).
+# back to model-neutral, re-comment the lines below. Every active line has loaded and
+# benched OK; models that never loaded in any run were removed (see the Heretic note).
+# The 27B_UD-Q4_K_XL example stays commented — a stock Q4_K_XL 27B dense is ~16-17 GB and
+# won't fit 16 GB VRAM; uncomment only to probe it.
 CONFIGS=(
   # Qwen needs the system prompt (field 4) and the froggeric tool-call template (field 5)
   # for clean agentic/tool-call output.
@@ -115,16 +116,12 @@ CONFIGS=(
   "35B_UD-Q4_K_XL|unsloth/Qwen3.6-35B-A3B-GGUF:UD-Q4_K_XL|moe|You are Qwen, created by Alibaba Cloud. You are a helpful assistant.|../templates/qwen36-froggeric-v20.jinja"
   "35B_UD-Q3_K_M|unsloth/Qwen3.6-35B-A3B-GGUF:UD-Q3_K_M|moe|You are Qwen, created by Alibaba Cloud. You are a helpful assistant.|../templates/qwen36-froggeric-v20.jinja"
 
-  # --- uncensored / Heretic (optional — isolated-sandbox track only; see model-benches/qwen36.md §3) ---
-  # "27B_Heretic_Youssofal|Youssofal/Qwen3.6-27B-Abliterated-Heretic-Uncensored-GGUF:Q4_K_M|dense||../templates/qwen36-froggeric-v20.jinja"
-  # 3-bit 27B Heretic: smaller, aims to fit the dense model fully on-GPU with KV room (Q4_K_M offloads).
-  #   Q3_K_M is the smallest 3-bit tag the uploader ships (qwen36.md §3). Q3_K_L was tried but the
-  #   repo does NOT publish it — the -hf resolver returns "no GGUF files found" and the model never
-  #   loads (confirmed in the 2026-07-02 runs). Removed; use Q3_K_M for on-GPU 3-bit.
+  # --- uncensored / Heretic (isolated-sandbox track only; see model-benches/qwen36.md §3) ---
+  # Dropped — never loaded in ANY run (no OK row), so removed rather than left commented:
+  #   • Youssofal Q4_K_M (bare) and Q3_K_L — Q3_K_L isn't published (-hf: "no GGUF files found");
+  #     Q4_K_M never loaded. Use Q3_K_M below for on-GPU 3-bit Heretic.
+  #   • 35B HauhauCS-Aggressive Q4_K_P — gated repo (HTTP 401 without HF_TOKEN) AND ~18 GB > 16 GB VRAM.
   "27B_Heretic_Youssofal_Q3_K_M|Youssofal/Qwen3.6-27B-Abliterated-Heretic-Uncensored-GGUF:Q3_K_M|dense||../templates/qwen36-froggeric-v20.jinja"
-  # HauhauCS-Aggressive 35B is a GATED/private repo → needs a valid HF_TOKEN (see Secrets block above),
-  #   else the resolver returns HTTP 401 and it never downloads (confirmed in the 2026-07-02 runs).
-  # "35B_Heretic_HauhauCS|fredrezones55/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive:Q4_K_P|moe||../templates/qwen36-froggeric-v20.jinja"
   # HauhauCS "Balanced" 27B dense: abliteration + K_P imatrix quants that KEEP the reasoning
   #   trace (reasons out loud, adds a short disclaimer, then answers in full). Ships an mmproj
   #   (vision). IQ4_XS (~15 GB) is the apples-to-apples quant vs stock 27B; Q3_K_P (~14 GB) /
