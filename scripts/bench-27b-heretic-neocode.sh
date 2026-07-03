@@ -36,18 +36,60 @@ command -v jq >/dev/null || { echo "Install jq:  sudo apt install jq"; exit 1; }
 # Pull + verify every quant to cache first, so the bench never stalls mid-run.
 # CPU-only minimal load (-ngl 0, tiny -p/-n) — same trick as prefetch.sh; the
 # -hf download grabs the full GGUF and the load confirms it parses. No GPU used.
+# Downloads run CONCURRENTLY, up to PREFETCH_JOBS at a time (default 3), so both
+# quants pull in parallel instead of one-then-the-other.
 if [ "${1:-}" = "prefetch" ] || [ "${PREFETCH:-0}" = 1 ]; then
   read -ra quants <<< "$QUANTS"
-  echo ">>> prefetch: $REPO_BASE  quants: ${quants[*]}"
-  fail=0
-  for q in "${quants[@]}"; do
-    echo "    fetching $q ..."
-    if "$LLAMA_BENCH" -hf "$REPO_BASE:$q" -ngl 0 -p 1 -n 1 -r 1 >/dev/null 2>&1; then
+  PREFETCH_JOBS="${PREFETCH_JOBS:-3}"
+  echo ">>> prefetch: $REPO_BASE  quants: ${quants[*]}  (up to $PREFETCH_JOBS concurrent)"
+  mkdir -p "$OUTDIR"
+  rm -f "$OUTDIR"/prefetch_HereticNEO_*.status
+
+  fetch_one() {   # $1 = quant
+    local q="$1"
+    if "$LLAMA_BENCH" -hf "$REPO_BASE:$q" -ngl 0 -p 1 -n 1 -r 1 \
+         > "$OUTDIR/prefetch_HereticNEO_${q}.log" 2>&1; then
+      echo OK   > "$OUTDIR/prefetch_HereticNEO_${q}.status"
       echo "    OK      $REPO_BASE:$q"
     else
-      echo "    FAILED  $REPO_BASE:$q  (bad quant tag? network? disk full?)"; fail=$((fail+1))
+      echo FAIL > "$OUTDIR/prefetch_HereticNEO_${q}.status"
+      echo "    FAILED  $REPO_BASE:$q  — see $OUTDIR/prefetch_HereticNEO_${q}.log (bad quant tag? network? disk full?)"
     fi
+  }
+
+  # Live progress: report per-quant done/total plus how fast the on-disk cache is
+  # growing (≈ download speed). A run of "+0 MiB" ticks means a stalled download.
+  # Silence with PREFETCH_PROGRESS=0; tick interval via PROGRESS_EVERY (default 5s).
+  PREFETCH_PROGRESS="${PREFETCH_PROGRESS:-1}"; PROGRESS_EVERY="${PROGRESS_EVERY:-5}"
+  _cache_dirs=(); for _d in "${LLAMA_CACHE:-}" "${HF_HOME:-}" "$HOME/.cache/llama.cpp" "$HOME/.cache/huggingface"; do
+    [ -n "$_d" ] && [ -d "$_d" ] && _cache_dirs+=("$_d"); done
+  _last_kib=0
+  show_progress() {
+    local done total="${#quants[@]}" now_kib
+    done=$(ls "$OUTDIR"/prefetch_HereticNEO_*.status 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$PREFETCH_PROGRESS" = 1 ] && [ "${#_cache_dirs[@]}" -gt 0 ]; then
+      now_kib=$(du -sck "${_cache_dirs[@]}" 2>/dev/null | tail -1 | cut -f1)
+      if [ -n "$now_kib" ] && [ "$_last_kib" -gt 0 ] && [ "$now_kib" -ge "$_last_kib" ]; then
+        printf '      .. %d/%d done | cache %d GiB, +%d MiB in ~%ds (%s active)\n' \
+          "$done" "$total" "$(( now_kib / 1048576 ))" "$(( (now_kib - _last_kib) / 1024 ))" \
+          "$PROGRESS_EVERY" "$(jobs -rp | wc -l | tr -d ' ')"
+      else
+        printf '      .. %d/%d done (%s active)\n' "$done" "$total" "$(jobs -rp | wc -l | tr -d ' ')"
+      fi
+      [ -n "$now_kib" ] && _last_kib=$now_kib
+    fi
+  }
+
+  for q in "${quants[@]}"; do
+    while [ "$(jobs -rp | wc -l)" -ge "$PREFETCH_JOBS" ]; do show_progress; sleep "$PROGRESS_EVERY"; done
+    echo "    start: $q ..."
+    fetch_one "$q" &
   done
+  while [ "$(jobs -rp | wc -l)" -gt 0 ]; do show_progress; sleep "$PROGRESS_EVERY"; done
+  wait
+
+  fail=$(grep -lx FAIL "$OUTDIR"/prefetch_HereticNEO_*.status 2>/dev/null | wc -l | tr -d ' ')
+  rm -f "$OUTDIR"/prefetch_HereticNEO_*.status
   [ "$fail" -eq 0 ] && echo "All quants cached." || { echo "$fail quant(s) failed."; exit 1; }
   exit 0
 fi
