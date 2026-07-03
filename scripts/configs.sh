@@ -150,3 +150,19 @@ CONFIGS=(
   "27B_Heretic_NEO_CODE_IQ3_M|DavidAU/Qwen3.6-27B-Heretic-Uncensored-FINETUNE-NEO-CODE-Di-IMatrix-MAX-GGUF:IQ3_M|dense|You are Qwen, created by Alibaba Cloud. You are a helpful assistant.|../templates/qwen36-froggeric-v20.jinja"
   "27B_Heretic_NEO_CODE_IQ4_XS|DavidAU/Qwen3.6-27B-Heretic-Uncensored-FINETUNE-NEO-CODE-Di-IMatrix-MAX-GGUF:IQ4_XS|dense|You are Qwen, created by Alibaba Cloud. You are a helpful assistant.|../templates/qwen36-froggeric-v20.jinja"
 )
+
+# Optional config filter (applies to prefetch, bench AND quality — anything that sources
+# this file). Set ONLY to a POSIX extended regex; a config runs if its LABEL or TYPE
+# matches. Empty ⇒ all active configs. Examples:
+#   ONLY=moe   ./run-quality.sh     # just the MoE configs (fast, full-GPU)
+#   ONLY=dense ./run-bench.sh       # just dense
+#   ONLY=NEO_CODE ./run-quality.sh  # every NEO-CODE variant
+#   ONLY='35B_UD-Q3' ./run-bench.sh # one specific model
+if [[ -n "${ONLY:-}" ]]; then
+  _filtered=()
+  for _e in "${CONFIGS[@]}"; do
+    IFS='|' read -r _lbl _repo _typ _rest <<< "$_e"
+    if [[ "$_lbl" =~ $ONLY || "$_typ" =~ $ONLY ]]; then _filtered+=("$_e"); fi
+  done
+  CONFIGS=("${_filtered[@]}")
+fi
