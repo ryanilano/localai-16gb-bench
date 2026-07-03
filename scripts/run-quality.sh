@@ -91,6 +91,12 @@ start_server() {   # $1 = repo:quant ; remaining args = extra flags (e.g. --n-cp
 
 stop_server() { kill "$SRV_PID" 2>/dev/null; wait "$SRV_PID" 2>/dev/null; sleep 2; }
 
+# Global defaults for the per-model KV overrides below. Captured once so a per-model value
+# for one config never leaks into the next (each iteration re-resolves from these, not from
+# the possibly-overridden globals the server last used). Env QCTX=/KV_QUANT= still set these.
+QCTX_DEFAULT="$QCTX"
+KV_QUANT_DEFAULT="$KV_QUANT"
+
 ran_labels=()   # models actually exercised this pass, for the run report
 for entry in "${CONFIGS[@]}"; do
   IFS='|' read -r label repo type sys tmpl ngl <<< "$entry"
@@ -100,6 +106,13 @@ for entry in "${CONFIGS[@]}"; do
   [ -n "$sys" ]  || sys="$SYS_DEFAULT"
   [ -n "$tmpl" ] || tmpl="$CHAT_TEMPLATE"
   [ -n "$ngl" ]  || ngl="$NGL_DEFAULT"
+
+  # Per-model KV overrides (configs.sh lookups, keyed by label) → the server's -c / -ctk/-ctv.
+  # A tight dense quant OOMs when the full QCTX KV window is preallocated at load; these let
+  # such a config cap its window / tighten its KV quant instead of failing. Server reads the
+  # $QCTX / $KV_QUANT globals, so set them for this iteration (re-resolved from the defaults).
+  _q=$(qctx_for_label "$label");      QCTX="${_q:-$QCTX_DEFAULT}"
+  _kv=$(kv_quant_for_label "$label"); KV_QUANT="${_kv:-$KV_QUANT_DEFAULT}"
   tmpl_flags=()
   if [ -n "$tmpl" ]; then
     [ -f "$tmpl" ] || { echo "    template not found for $label: $tmpl — skipping"; continue; }
@@ -113,7 +126,7 @@ for entry in "${CONFIGS[@]}"; do
   SRV_LOG="$outdir/_server.log"
 
   eff_ngl="$ngl"   # actual offload used, for the run report (may change on fallback)
-  echo ">>> starting $label (ngl=$ngl) ..."
+  echo ">>> starting $label (ngl=$ngl, qctx=$QCTX, kv=$KV_QUANT) ..."
   if ! start_server "$repo" -ngl "$ngl" "${moe_flags[@]}" "${tmpl_flags[@]}"; then
     stop_server
     if [ "$ngl" = "-1" ]; then
@@ -161,7 +174,7 @@ for entry in "${CONFIGS[@]}"; do
   done
 
   stop_server
-  ran_labels+=("$label -> $repo  [ngl=$eff_ngl]")
+  ran_labels+=("$label -> $repo  [ngl=$eff_ngl, qctx=$QCTX, kv=$KV_QUANT]")
 done
 
 # Human-readable report: provenance stamp + which models/prompts this pass ran.
