@@ -41,7 +41,7 @@ echo "    ctx=$CTX  n-cpu-moe=$NCMOE  kv=$KV_QUANT  threads=$THREADS  http://$HO
 echo "    note: this is RAM-bound, not VRAM-bound — watch system RAM at deep context."
 
 exec "$LLAMA_SERVER" \
-  -hf "$REPO" \
+  -hf "$REPO" --no-mmproj \
   -ngl 99 --n-cpu-moe "$NCMOE" -fa on \
   -c "$CTX" \
   -ctk "$KV_QUANT" -ctv "$KV_QUANT" \

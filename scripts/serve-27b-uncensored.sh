@@ -40,7 +40,7 @@ echo ">>> serving $REPO"
 echo "    ctx=$CTX  kv=$KV_QUANT  threads=$THREADS  http://$HOST:$PORT"
 
 exec "$LLAMA_SERVER" \
-  -hf "$REPO" \
+  -hf "$REPO" --no-mmproj \
   -ngl 99 -fa on \
   -c "$CTX" \
   -ctk "$KV_QUANT" -ctv "$KV_QUANT" \

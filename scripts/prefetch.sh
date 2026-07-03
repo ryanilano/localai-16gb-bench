@@ -103,7 +103,7 @@ show_progress() {
 # polls the running-job count every PROGRESS_EVERY seconds and prints progress.
 n=0
 for entry in "${CONFIGS[@]}"; do
-  IFS='|' read -r label repo type sys tmpl <<< "$entry"   # sys/tmpl unused here; read them so they don't fold into $type
+  IFS='|' read -r label repo type sys tmpl ngl <<< "$entry"   # sys/tmpl/ngl unused here; read them so they don't fold into $type
   n=$((n+1))
   while [ "$(jobs -rp | wc -l)" -ge "$PREFETCH_JOBS" ]; do show_progress; sleep "$PROGRESS_EVERY"; done
   echo "[$n/${#CONFIGS[@]}] start: $label  ($repo)"

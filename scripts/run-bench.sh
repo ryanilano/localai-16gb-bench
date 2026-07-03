@@ -48,7 +48,7 @@ for entry in "${CONFIGS[@]}"; do
 done
 i=0
 for entry in "${CONFIGS[@]}"; do
-  IFS='|' read -r label repo type sys tmpl <<< "$entry"   # sys/tmpl unused here (bench doesn't template); read them so they don't fold into $type
+  IFS='|' read -r label repo type sys tmpl ngl <<< "$entry"   # sys/tmpl/ngl unused here (bench doesn't template); read them so they don't fold into $type
   quant="${repo##*:}"
   moe_flags=(); [ "$type" = "moe" ] && moe_flags=(--n-cpu-moe "$NCMOE_ALL")
 

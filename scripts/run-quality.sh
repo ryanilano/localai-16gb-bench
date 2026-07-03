@@ -25,6 +25,12 @@ GEN=768                 # max tokens per answer
 # the fit map / throughput.csv) or the server will OOM on boot. Env-overridable.
 QCTX="${QCTX:-8192}"
 
+# GPU-layer offload for the quality server. 99 = full offload (matches the throughput
+# bench regime). Per-model override via CONFIGS field 6; env-override via NGL=. A config
+# that fails to boot at its ngl is retried once with -ngl -1 (llama.cpp auto-fit) below,
+# so a tight quant still yields answers instead of a blank dir.
+NGL_DEFAULT="${NGL:-99}"
+
 # This quality pass gets its own self-contained run folder ($OUTDIR/<slug>/),
 # so re-runs and different model sets never overwrite each other's answers.
 SLUG=$(run_slug)
@@ -45,10 +51,15 @@ fi
 
 start_server() {   # $1 = repo:quant ; remaining args = extra flags (e.g. --n-cpu-moe, --jinja ...)
   local repo="$1"; shift
-  "$LLAMA_SERVER" -hf "$repo" \
-    -ngl 99 -fa on "$@" \
+  # --no-mmproj: these Qwen3.6 GGUF repos ship a vision projector that the -hf
+  # resolver auto-loads. On a 16 GB card the CLIP buffer (~888 MiB) OOMs *after*
+  # the model is fully offloaded, crashing the server on boot (every answer then
+  # logs "no response"). We only run text prompts, so drop it entirely.
+  # -ngl is passed by the caller (per-config field 6 / auto-fit fallback), not fixed here.
+  "$LLAMA_SERVER" -hf "$repo" --no-mmproj \
+    -fa on "$@" \
     -ctk "$KV_QUANT" -ctv "$KV_QUANT" -t "$THREADS" -c "$QCTX" \
-    --host 127.0.0.1 --port "$PORT" > "$RUNDIR/_server.log" 2>&1 &
+    --host 127.0.0.1 --port "$PORT" > "$SRV_LOG" 2>&1 &
   SRV_PID=$!
   for _ in $(seq 1 600); do                       # wait up to ~20 min for first download
     curl -sf "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 && return 0
@@ -62,12 +73,13 @@ stop_server() { kill "$SRV_PID" 2>/dev/null; wait "$SRV_PID" 2>/dev/null; sleep 
 
 ran_labels=()   # models actually exercised this pass, for the run report
 for entry in "${CONFIGS[@]}"; do
-  IFS='|' read -r label repo type sys tmpl <<< "$entry"
+  IFS='|' read -r label repo type sys tmpl ngl <<< "$entry"
   moe_flags=(); [ "$type" = "moe" ] && moe_flags=(--n-cpu-moe "$NCMOE_ALL")
 
-  # Resolve per-model system prompt and chat template, with global fallbacks.
+  # Resolve per-model system prompt, chat template, and ngl, with global fallbacks.
   [ -n "$sys" ]  || sys="$SYS_DEFAULT"
   [ -n "$tmpl" ] || tmpl="$CHAT_TEMPLATE"
+  [ -n "$ngl" ]  || ngl="$NGL_DEFAULT"
   tmpl_flags=()
   if [ -n "$tmpl" ]; then
     [ -f "$tmpl" ] || { echo "    template not found for $label: $tmpl — skipping"; continue; }
@@ -75,11 +87,29 @@ for entry in "${CONFIGS[@]}"; do
   fi
 
   outdir="$RUNDIR/quality/$label"; mkdir -p "$outdir"
+  # Per-model server log next to this model's answers, so a crash for one config
+  # isn't clobbered by the next (and the "(no response — see _server.log)" note in
+  # each answer points at the log right beside it).
+  SRV_LOG="$outdir/_server.log"
 
-  echo ">>> starting $label ..."
-  if ! start_server "$repo" "${moe_flags[@]}" "${tmpl_flags[@]}"; then
-    echo "    server failed to start (see $RUNDIR/_server.log) — skipping $label"
-    stop_server; continue
+  eff_ngl="$ngl"   # actual offload used, for the run report (may change on fallback)
+  echo ">>> starting $label (ngl=$ngl) ..."
+  if ! start_server "$repo" -ngl "$ngl" "${moe_flags[@]}" "${tmpl_flags[@]}"; then
+    stop_server
+    if [ "$ngl" = "-1" ]; then
+      echo "    server failed to start even at auto-fit (see $SRV_LOG) — skipping $label"
+      continue
+    fi
+    # Fallback: retry once letting llama.cpp auto-fit layers to free VRAM, so a config
+    # that can't hold full offload still yields answers. Keep the first attempt's log;
+    # write the retry to its own file so neither clobbers the other.
+    echo "    ngl=$ngl failed to boot — retrying with auto-fit (-ngl -1); first log: $SRV_LOG"
+    SRV_LOG="$outdir/_server.autofit.log"
+    if ! start_server "$repo" -ngl -1 "${moe_flags[@]}" "${tmpl_flags[@]}"; then
+      echo "    auto-fit also failed (see $SRV_LOG) — skipping $label"
+      stop_server; continue
+    fi
+    eff_ngl="-1 (auto-fit fallback)"
   fi
 
   for pf in prompts/*.txt; do
@@ -101,7 +131,7 @@ for entry in "${CONFIGS[@]}"; do
   done
 
   stop_server
-  ran_labels+=("$label -> $repo")
+  ran_labels+=("$label -> $repo  [ngl=$eff_ngl]")
 done
 
 # Human-readable report: provenance stamp + which models/prompts this pass ran.

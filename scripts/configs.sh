@@ -86,7 +86,7 @@ NCMOE_ALL=99
 # --- Test matrix -----------------------------------------------------------
 # Format (5 pipe-delimited fields; fields 4 and 5 are OPTIONAL):
 #
-#   label | hf_repo:quant | type(dense|moe) | system_prompt | chat_template_path
+#   label | hf_repo:quant | type(dense|moe) | system_prompt | chat_template_path | gpu_layers
 #
 #   label              short name used for output dirs/CSV rows.
 #   hf_repo:quant      a real HF GGUF repo + a quant tag that matches a file in it.
@@ -95,6 +95,11 @@ NCMOE_ALL=99
 #   chat_template_path (optional) per-model .jinja template (used by run-quality.sh's
 #                      llama-server only; bench doesn't template). Empty ⇒ use
 #                      CHAT_TEMPLATE, else the model's built-in template.
+#   gpu_layers         (optional) -ngl for the quality server (run-quality.sh only;
+#                      prefetch/bench ignore it). Empty ⇒ NGL_DEFAULT (99 = full offload).
+#                      Set a smaller number for a config that OOMs at full offload, or -1
+#                      to auto-fit. run-quality.sh also auto-retries a failed boot at -1,
+#                      so this field is only needed to skip that wasted first attempt.
 #
 # Adding a model = adding one line here; it flows through prefetch → bench → quality
 # unchanged. Drop any per-model template in ../templates/. Comment a line to skip it.
