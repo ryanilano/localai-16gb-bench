@@ -1,0 +1,5 @@
+{
+  "user": "The working directory has buggy.py with a function `dedupe`, and its unit tests in test_buggy.py are currently failing. Use the available tools to (1) read the code and the tests, (2) fix buggy.py so every test passes, and (3) run `python3 -m unittest test_buggy` to confirm. Reply DONE once all tests pass. Do not edit test_buggy.py.",
+  "max_turns": 12,
+  "check": "python3 -m unittest test_buggy"
+}
