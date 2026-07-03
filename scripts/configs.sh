@@ -92,16 +92,18 @@ NCMOE_ALL=99
 # quants; each echoes empty for an unlisted model (→ run-quality.sh uses the global QCTX /
 # KV_QUANT). Throughput/prefetch ignore them. Kept as `case` (not a bash-4 associative array)
 # so the scripts stay runnable on bash 3.2.
+# NOTE: 27B_HauhauCS_Balanced is an IQ4_XS quant (repo tag :IQ4_XS) despite its label —
+# it belongs with the other IQ4_XS dense quants below, not with the default-KV group.
 qctx_for_label() {
   case "$1" in
     27B_HauhauCS_Balanced_Q3_K_P)                              echo 6144 ;;  # ~14.1 GB weights → full 8192 KV won't fit
-    27B_IQ4_XS|27B_NEO_CODE_IQ4_XS|27B_Heretic_NEO_CODE_IQ4_XS) echo 4096 ;;  # ~15.0 GB weights; only a small KV fits, even with q4_0
+    27B_IQ4_XS|27B_NEO_CODE_IQ4_XS|27B_Heretic_NEO_CODE_IQ4_XS|27B_HauhauCS_Balanced) echo 4096 ;;  # ~15 GB weights; only a small KV fits, even with q4_0
     *)                                                         echo ""   ;;
   esac
 }
 kv_quant_for_label() {
   case "$1" in
-    27B_IQ4_XS|27B_NEO_CODE_IQ4_XS|27B_Heretic_NEO_CODE_IQ4_XS) echo q4_0 ;;  # halve KV vs q8_0 so a 4 k window fits the ~1 GB headroom
+    27B_IQ4_XS|27B_NEO_CODE_IQ4_XS|27B_Heretic_NEO_CODE_IQ4_XS|27B_HauhauCS_Balanced) echo q4_0 ;;  # halve KV vs q8_0 so a 4 k window fits the ~1 GB headroom
     *)                                                         echo ""    ;;
   esac
 }
