@@ -17,7 +17,12 @@ command -v curl >/dev/null || { echo "Install curl"; exit 1; }
 # A global CHAT_TEMPLATE is optional now (per-model field 5 overrides it; both may be empty).
 [ -z "$CHAT_TEMPLATE" ] || [ -f "$CHAT_TEMPLATE" ] || { echo "CHAT_TEMPLATE set but not found at $CHAT_TEMPLATE"; exit 1; }
 
-GEN=768                 # max tokens per answer
+# Max tokens per answer. These Qwen3.6 models are REASONING models: they emit a long
+# thinking phase (routed to reasoning_content) before the final answer. 768 is far too
+# small — the model burns the whole budget thinking and never reaches the answer, leaving
+# content empty (blank .md). 2048 gives room to think AND answer; bump higher for very
+# hard prompts. Env-overridable: GEN=4096 ./run-quality.sh
+GEN="${GEN:-2048}"
 # Server context window for the quality pass. Default 8192 is ample for the short
 # prompts in prompts/ (each answers well inside GEN tokens) and keeps every model's
 # KV small so all fit. Override for a one-off long-context quality probe, e.g.
@@ -126,7 +131,17 @@ for entry in "${CONFIGS[@]}"; do
         temperature:0.6, top_p:0.95, top_k:20, max_tokens:$n}')
     resp=$(curl -sf "http://127.0.0.1:$PORT/v1/chat/completions" \
              -H 'Content-Type: application/json' -d "$body" || echo '{}')
-    content=$(echo "$resp" | jq -r '.choices[0].message.content // .error.message // "(no response — see _server.log)"')
+    # Reasoning models split output into content (final answer) + reasoning_content (the
+    # think phase). Prefer content; if it's empty (e.g. the answer got truncated by GEN
+    # mid-think), fall back to reasoning_content so the answer is never silently blank.
+    # jq's // won't do this — "" is a valid value to it — so test length explicitly.
+    content=$(echo "$resp" | jq -r '
+      .choices[0].message as $m
+      | ($m.content // "")           as $c
+      | ($m.reasoning_content // "") as $r
+      | if   ($c|length) > 0 then $c
+        elif ($r|length) > 0 then "> ⚠️ reasoning only — no final answer (raise GEN). Thinking phase:\n\n" + $r
+        else (.error.message // "(no response — see _server.log)") end')
     {
       echo "# $label — $name"; echo
       echo "## Prompt"; echo; cat "$pf"; echo
