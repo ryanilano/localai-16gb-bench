@@ -5,8 +5,10 @@ This file provides guidance to coding agents (Claude Code, and any other agent t
 
 ## What this is
 
-A self-contained, **model-neutral** bundle of **documentation + bash automation** for benchmarking
-GGUF quants (dense or MoE) of any local LLM under `llama.cpp` on a 16 GB NVIDIA GPU. The numbers in
+A self-contained bundle of **documentation + bash automation** for benchmarking GGUF quants (dense
+or MoE) of any local LLM under `llama.cpp` on a 16 GB NVIDIA GPU. The **engine is model-neutral**
+(driven entirely by the `CONFIGS` matrix); `configs.sh` ships with an **active Qwen3.6 sweep** you
+can re-comment to go neutral or replace with your own. The numbers in
 the worked example (`model-benches/qwen36.md`) are the reference figures for one configuration: a
 Proxmox LXC container with a passed-through RTX 4070 Ti Super 16 GB on a 7800X3D host, with 24 GB
 RAM / 8 cores allocated to the container (the 16 GB VRAM and ~22 GB usable RAM are the binding

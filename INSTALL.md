@@ -81,11 +81,13 @@ Edit `configs.sh`:
 
 - [x] Set `LLAMA_DIR` to your llama.cpp checkout (the folder containing `build/bin/`).
 - [x] (Optional) Set `LLAMA_CACHE` to a big disk if you don't want GGUFs in `~/.cache`.
-- [x] **Register your models in `CONFIGS`.** Each line is 5 pipe-delimited fields (fields 4-5
-      optional): `label|hf_repo:quant|type(dense|moe)|system_prompt|chat_template_path`. The repo
-      ships model-neutral, so **all lines are commented out**. Uncomment the Qwen3.6 example block to
-      reproduce the worked example, or add your own model lines (see `benchmark-methodology.md`,
-      "How to add a model"). Leave the Heretic/uncensored lines commented for now (Step 9).
+- [x] **Review the `CONFIGS` matrix.** Each line is 5 pipe-delimited fields (fields 4-5 optional):
+      `label|hf_repo:quant|type(dense|moe)|system_prompt|chat_template_path`. `configs.sh` **ships with
+      the Qwen3.6 16 GB sweep already active** (9 configs), so you can reproduce the worked example
+      as-is — no edits needed. To go model-neutral, re-comment those lines; to add your own, append
+      lines (see `benchmark-methodology.md`, "How to add a model"). The uncensored 27B lines are active
+      too — the isolated-sandbox caveat still applies (Step 9). Only the **gated `35B_Heretic_HauhauCS`**
+      stays commented: it needs an `HF_TOKEN` (Step 9).
 - [ ] (Optional) Trim `DEPTHS` to `(0 8192 32768)` for a faster first pass.
 
 Sanity check:
@@ -187,12 +189,15 @@ If you picked a MoE model, claw back speed by moving experts onto the GPU until 
 
 ## Step 9: (Optional) Uncensored / Heretic track
 
-Only if you want a variant that won't false-refuse inside the sandbox _(see model-benches/qwen36.md §3)_:
+The uncensored 27B lines **ship active** and run in the default sweep _(rationale in
+model-benches/qwen36.md §3)_: the Youssofal 27B (lowest KLD) and **`27B_HauhauCS_Balanced`**
+(softest-touch 27B — keeps the reasoning trace, ships an mmproj). If you don't want them, re-comment
+those lines. Quant guidance: `IQ4_XS` for the stock-27B offload regime, or a 3-bit tag for more on-GPU
+KV room; the ~18 GB `Q4_K_P` overflows 16 GB — skip it.
 
-- [ ] Uncomment the Heretic/uncensored lines in `configs.sh` (or add others from §3). Options include
-      the Youssofal 27B (lowest KLD) and **`27B_HauhauCS_Balanced`** (softest-touch 27B: keeps the
-      reasoning trace, ships an mmproj). Use `IQ4_XS` for the stock-27B offload regime, or a 3-bit tag
-      for more on-GPU KV room; the ~18 GB `Q4_K_P` overflows 16 GB — skip it.
+- [ ] **Gated 35B (needs a token):** to add `35B_Heretic_HauhauCS`, put an `HF_TOKEN` with repo access
+      in `.local/secrets.env` (see the Secrets block in `configs.sh`) and uncomment its line. Without a
+      token the `-hf` resolver returns HTTP 401 and it never downloads.
 - [ ] **Code finetune (separate, experimental):** `27B_NEO_CODE_*` (DavidAU) is a code-specialized
       _finetune_, not an abliteration — it has no KLD drift proxy, so judge it **only** on the Step 6
       coding outputs. `IQ4_XS` (~15.4 GB) matches the stock-27B offload regime; `IQ3_M` (~12.9 GB) fits

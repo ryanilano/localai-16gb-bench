@@ -3,7 +3,9 @@
 A repeatable way to benchmark **any GGUF model family** (dense or MoE) at 4-bit and beyond under
 `llama.cpp` on a **16 GB NVIDIA GPU**, and pick a daily driver from real speed/fit/quality numbers.
 
-The bundle ships **model-neutral**: you register the models you want in one config file. The
+The **engine is model-neutral** — the scripts are driven entirely by the `CONFIGS` matrix in one
+config file, so any model family drops in. `configs.sh` ships with an **active Qwen3.6 16 GB sweep**
+(the worked example below); re-comment those lines to go fully neutral, or swap in your own. The
 numbers and fit ceilings in the included worked example were measured on one **reference
 configuration**, a Proxmox LXC container with a passed-through **RTX 4070 Ti Super (16 GB)** on a
 **7800X3D** host, with **24 GB RAM and 8 cores allocated to the container**. Those are the
