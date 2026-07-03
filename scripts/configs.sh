@@ -71,7 +71,7 @@ if [[ "${BENCH_PROFILE:-}" == "longctx" ]]; then
                                                         # per HF card). Top rung = 262144 - PROMPT_LEN(512) so the
                                                         # bench's own prefill stays inside the trained window (no YaRN).
 fi
-KV_QUANT="q8_0"                    # KV cache type (q8_0 halves KV vs f16)
+KV_QUANT="${KV_QUANT:-q8_0}"       # KV cache type (q8_0 halves KV vs f16); env-overridable for KV-quant fit probes
 THREADS=8                          # physical cores to use (tune to your CPU)
 PORT="${PORT:-8080}"               # llama-server port for the quality pass (env-overridable: PORT=8099 ./run-quality.sh)
 PREFETCH_JOBS="${PREFETCH_JOBS:-3}" # parallel downloads in prefetch.sh; 2-4 is usually best
