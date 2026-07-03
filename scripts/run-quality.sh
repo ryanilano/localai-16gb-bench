@@ -54,12 +54,19 @@ if ! ls prompts/*.txt >/dev/null 2>&1; then
   echo "Seeded example prompts in ./prompts/ — replace them with your own real tasks."
 fi
 
+port_free() {   # true when nothing is listening on $PORT (curl gets connection-refused)
+  ! curl -s -o /dev/null --max-time 1 "http://127.0.0.1:$PORT/health" 2>/dev/null
+}
+
 start_server() {   # $1 = repo:quant ; remaining args = extra flags (e.g. --n-cpu-moe, --jinja ...)
   local repo="$1"; shift
   # A stale llama-server from a crashed prior run (or an OOM'd first boot) can still hold
-  # $PORT, making bind fail ("couldn't bind HTTP server socket"). We run exactly one server
-  # at a time, so clear any lingering llama-server before binding.
-  if pkill -f "$LLAMA_SERVER" 2>/dev/null; then echo "    cleared a stale llama-server before binding :$PORT"; sleep 2; fi
+  # $PORT, making our bind fail ("couldn't bind HTTP server socket"). Worse: the stale
+  # server's /health answers our readiness poll, so we'd mistake it for our own server and
+  # write blank answers against it (the 2026-07-03_013717 failure). Kill any lingering
+  # llama-server and wait until $PORT is actually free before binding — a blind sleep races.
+  if pkill -f "$LLAMA_SERVER" 2>/dev/null; then echo "    cleared a stale llama-server before binding :$PORT"; fi
+  for _ in $(seq 1 15); do port_free && break; sleep 1; done
   # --no-mmproj: these Qwen3.6 GGUF repos ship a vision projector that the -hf
   # resolver auto-loads. On a 16 GB card the CLIP buffer (~888 MiB) OOMs *after*
   # the model is fully offloaded, crashing the server on boot (every answer then
@@ -71,8 +78,9 @@ start_server() {   # $1 = repo:quant ; remaining args = extra flags (e.g. --n-cp
     --host 127.0.0.1 --port "$PORT" > "$SRV_LOG" 2>&1 &
   SRV_PID=$!
   for _ in $(seq 1 600); do                       # wait up to ~20 min for first download
+    kill -0 "$SRV_PID" 2>/dev/null || return 1     # our server died (e.g. bind failed) — fail
+    # now, before a foreign /health can masquerade as our server being ready
     curl -sf "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 && return 0
-    kill -0 "$SRV_PID" 2>/dev/null || return 1     # server died
     sleep 2
   done
   return 1
