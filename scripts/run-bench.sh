@@ -39,13 +39,21 @@ sample_mem() {
   echo "$maxv $maxr" > "$out"
 }
 
-total=$(( ${#CONFIGS[@]} * ${#DEPTHS[@]} )); i=0
+# MoE and dense can sweep different depth sets (MoE has far more VRAM headroom — see
+# DEPTHS_MOE in configs.sh), so total is summed per config type, not a flat product.
+total=0
+for entry in "${CONFIGS[@]}"; do
+  IFS='|' read -r _l _r _t _rest <<< "$entry"
+  [ "$_t" = "moe" ] && total=$(( total + ${#DEPTHS_MOE[@]} )) || total=$(( total + ${#DEPTHS[@]} ))
+done
+i=0
 for entry in "${CONFIGS[@]}"; do
   IFS='|' read -r label repo type sys tmpl <<< "$entry"   # sys/tmpl unused here (bench doesn't template); read them so they don't fold into $type
   quant="${repo##*:}"
   moe_flags=(); [ "$type" = "moe" ] && moe_flags=(--n-cpu-moe "$NCMOE_ALL")
 
-  for depth in "${DEPTHS[@]}"; do
+  if [ "$type" = "moe" ]; then depths=("${DEPTHS_MOE[@]}"); else depths=("${DEPTHS[@]}"); fi
+  for depth in "${depths[@]}"; do
     i=$((i+1)); echo "[$i/$total] $label  depth=$depth ..."
     flag=$(mktemp); memout=$(mktemp); : > "$flag"
     sample_mem "$flag" "$memout" & sampler=$!

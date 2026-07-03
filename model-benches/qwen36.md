@@ -258,8 +258,7 @@ nano scripts/configs.sh           # set LLAMA_DIR, edit the CONFIGS matrix
 | `35B_UD-Q3_K_M`† | UD-Q3_K_M | moe | 0-32K | mostly-in-VRAM option |
 | `27B_Heretic_Youssofal` | Q4_K_M | dense | 0-32K | uncensored, lowest KLD *(commented out by default)* |
 | `27B_Heretic_Youssofal_Q3_K_M` | Q3_K_M | dense | 0-32K | uncensored 3-bit; smaller, fits dense on-GPU *(commented out)* |
-| `27B_Heretic_Youssofal_Q3_K_L`‡ | Q3_K_L | dense | 0-32K | uncensored top-3-bit *(commented out; confirm tag on HF)* |
-| `35B_Heretic_HauhauCS` | Q4_K_P | moe | 0-32K | uncensored MoE *(commented out by default)* |
+| `35B_Heretic_HauhauCS`‡ | Q4_K_P | moe | 0-32K | uncensored MoE; **gated repo — needs `HF_TOKEN`** *(commented out by default)* |
 | `27B_HauhauCS_Balanced` | IQ4_XS | dense | 0-32K | uncensored 27B, keeps reasoning trace; ships mmproj *(commented out)* |
 | `27B_HauhauCS_Balanced_Q3_K_P` | Q3_K_P | dense | 0-32K | same, ~14 GB for more on-GPU KV room *(commented out)* |
 | `27B_NEO_CODE_IQ4_XS`§ | IQ4_XS | dense | 0-32K | code finetune (not abliteration); ~15.4 GB, stock-27B offload regime *(commented out)* |
@@ -267,7 +266,7 @@ nano scripts/configs.sh           # set LLAMA_DIR, edit the CONFIGS matrix
 
 †Not a 4-bit quant, but `UD-Q3_K_M` (~16.6 GB) is the one config that gets the **MoE mostly into 16 GB VRAM**, worth keeping as the "max-speed, accept slight quality loss" option, and it directly answers the Q3_K_M-vs-Q4 question.
 
-‡`Q3_K_L` is **not** in Youssofal's documented quant list (§3 shows `Q4_K_M / Q3_K_M / Q2_K`). Confirm the tag exists on the HF repo before running, or point the config line at an uploader that ships a top-3-bit 27B. `Q3_K_M` (the row above it) is grounded.
+‡The `35B_Heretic_HauhauCS` repo (`fredrezones55/…HauhauCS-Aggressive`) is **gated/private**: the `-hf` resolver returns HTTP 401 and the model never downloads without a valid `HF_TOKEN` (put one in `.local/secrets.env` — see the Secrets block in `configs.sh`). Separately, `27B_Heretic_Youssofal_Q3_K_L` was removed: `Q3_K_L` is **not** published by Youssofal (§3 shows `Q4_K_M / Q3_K_M / Q2_K`), so it returned "no GGUF files found" and never loaded in the 2026-07-02 runs. Use `Q3_K_M` for on-GPU 3-bit.
 
 §`NEO_CODE` is a **finetune**, not an abliteration — no KLD drift proxy, so it lives in its own `configs.sh` block and is justified only by your Phase-C coding pass (see §3, "Code-specialized finetunes"). Both its tags (`IQ4_XS`, `IQ3_M`) are on DavidAU's HF repo; `Q4_K_M` (~16.9 GB) exceeds 16 GB VRAM and is intentionally omitted.
 
