@@ -84,27 +84,25 @@ PREFETCH_JOBS="${PREFETCH_JOBS:-3}" # parallel downloads in prefetch.sh; 2-4 is 
 NCMOE_ALL=99
 
 # --- Per-model quality-pass KV overrides (run-quality.sh only) --------------
-# The quality server preallocates the ENTIRE -c (QCTX) KV cache up front, unlike the
-# throughput bench which grows KV with depth. So a dense quant that "fits 16 k" in the
-# sweep can still OOM as a server when the full QCTX window is reserved at load
-# (see 2026-07-03_034918/_035800: 27B_IQ4_XS OOMs allocating the KV buffer). These lookups,
-# keyed by CONFIGS label, cap QCTX and/or tighten the KV quant for the tight-fitting dense
-# quants; each echoes empty for an unlisted model (→ run-quality.sh uses the global QCTX /
-# KV_QUANT). Throughput/prefetch ignore them. Kept as `case` (not a bash-4 associative array)
-# so the scripts stay runnable on bash 3.2.
-# NOTE: 27B_HauhauCS_Balanced is an IQ4_XS quant (repo tag :IQ4_XS) despite its label —
-# it belongs with the other IQ4_XS dense quants below, not with the default-KV group.
+# Optional per-label QCTX / KV-quant overrides for the quality server; each echoes empty by
+# default, so every model uses the global QCTX / KV_QUANT. Throughput/prefetch ignore them.
+# Kept as `case` (not a bash-4 associative array) so the scripts stay runnable on bash 3.2.
+#
+# Currently EMPTY on purpose. Earlier (2026-07-03_034918/_035800) 27B_IQ4_XS OOM'd allocating
+# its 2720 MiB KV buffer, which looked like the model being too fat for a full QCTX window —
+# but both those runs predate the stale-server port-race fix (b3a45fe), and the real cause was
+# a killed-wrong-PID server still holding VRAM. Post-fix (2026-07-03_055350) 27B_IQ4_XS booted
+# clean and answered 9/9 with no OOM, and the throughput sweep shows its full 16 k footprint is
+# ~15.5 GB (< 16 GB) — so no dense quant here needs a cap. Add a line only if a specific model
+# genuinely OOMs on a clean run: e.g. `27B_foo) echo 6144 ;;` in qctx_for_label.
 qctx_for_label() {
   case "$1" in
-    27B_HauhauCS_Balanced_Q3_K_P)                              echo 6144 ;;  # ~14.1 GB weights → full 8192 KV won't fit
-    27B_IQ4_XS|27B_NEO_CODE_IQ4_XS|27B_Heretic_NEO_CODE_IQ4_XS|27B_HauhauCS_Balanced) echo 4096 ;;  # ~15 GB weights; only a small KV fits, even with q4_0
-    *)                                                         echo ""   ;;
+    *) echo "" ;;
   esac
 }
 kv_quant_for_label() {
   case "$1" in
-    27B_IQ4_XS|27B_NEO_CODE_IQ4_XS|27B_Heretic_NEO_CODE_IQ4_XS|27B_HauhauCS_Balanced) echo q4_0 ;;  # halve KV vs q8_0 so a 4 k window fits the ~1 GB headroom
-    *)                                                         echo ""    ;;
+    *) echo "" ;;
   esac
 }
 
@@ -126,9 +124,9 @@ kv_quant_for_label() {
 #                      to auto-fit. run-quality.sh also auto-retries a failed boot at -1,
 #                      so this field is only needed to skip that wasted first attempt.
 #
-# Per-model KV window/quant for the quality server are NOT fields here — they live in the
-# qctx_for_label / kv_quant_for_label lookups above (keyed by label), because a tight dense
-# quant OOMs when the full QCTX KV cache is preallocated at load.
+# Per-model KV window/quant for the quality server are NOT fields here — if a model ever needs
+# one, it goes in the qctx_for_label / kv_quant_for_label lookups above (keyed by label). Those
+# are currently empty; see the note there.
 #
 # Adding a model = adding one line here; it flows through prefetch → bench → quality
 # unchanged. Drop any per-model template in ../templates/. Comment a line to skip it.
