@@ -13,13 +13,12 @@
 #
 #   ./bench-27b-heretic-neocode.sh prefetch        # download+verify the quants first (run once)
 #   ./bench-27b-heretic-neocode.sh                 # both quants, default depths (0..32k)
-#   BENCH_PROFILE=longctx ./bench-27b-heretic-neocode.sh   # deep sweep (80k dense cap)
 #   QUANTS="IQ3_M" ./bench-27b-heretic-neocode.sh  # restrict to one quant
 # ===========================================================================
 set -uo pipefail
 cd "$(dirname "$0")"
-source ./configs.sh          # LLAMA_BENCH, KV_QUANT, THREADS, REPS, PROMPT_LEN, GEN_LEN,
-                             # DEPTHS[/_MOE], NCMOE_ALL, OUTDIR, HF_TOKEN handling
+source ./configs.sh          # LLAMA_BENCH, REPS, PROMPT_LEN, GEN_LEN, DEPTHS, OUTDIR
+                             # (+ ini.sh API; shared [*] flag defaults pulled below)
 source ./versions.sh         # run_slug, capture_versions, csv_to_md
 
 # --- Model under test (quants + type overridable) --------------------------
@@ -28,6 +27,13 @@ REPO_BASE="DavidAU/Qwen3.6-27B-Heretic-Uncensored-FINETUNE-NEO-CODE-Di-IMatrix-M
 # (fastest + roomiest to 80k) and IQ4_XS (higher fidelity, ~15 GB, fits to ~32k).
 QUANTS="${QUANTS:-IQ3_M IQ4_XS}"
 TYPE="${TYPE:-dense}"        # dense finetune — no expert offload
+
+# Shared llama.cpp flag defaults. These used to be configs.sh vars (KV_QUANT /
+# THREADS / NCMOE_ALL); the models.ini migration moved them into the [*] section,
+# so pull them from there to stay in sync with the registry's shared defaults.
+CTK="$(ini_get '*' ctk)"; CTV="$(ini_get '*' ctv)"
+THREADS="$(ini_get '*' t)"
+NCMOE_ALL="$(ini_get '*' n-cpu-moe)"
 
 command -v jq >/dev/null || { echo "Install jq:  sudo apt install jq"; exit 1; }
 [ -x "$LLAMA_BENCH" ] || { echo "llama-bench not found at $LLAMA_BENCH — set LLAMA_DIR in configs.sh"; exit 1; }
@@ -119,7 +125,8 @@ sample_mem() {
 }
 
 moe_flags=(); [ "$TYPE" = "moe" ] && moe_flags=(--n-cpu-moe "$NCMOE_ALL")
-if [ "$TYPE" = "moe" ]; then depths=("${DEPTHS_MOE[@]}"); else depths=("${DEPTHS[@]}"); fi
+# Single depth grid: the old longctx / DEPTHS_MOE split was dropped in the models.ini migration.
+depths=("${DEPTHS[@]}")
 
 read -ra quants <<< "$QUANTS"
 total=$(( ${#quants[@]} * ${#depths[@]} )); i=0
@@ -136,7 +143,7 @@ for QUANT in "${quants[@]}"; do
     json="$RUNDIR/json/${LABEL}_d${depth}.json"
     if "$LLAMA_BENCH" -hf "$REPO" \
          -ngl 99 -fa on "${moe_flags[@]}" \
-         -ctk "$KV_QUANT" -ctv "$KV_QUANT" \
+         -ctk "$CTK" -ctv "$CTV" \
          -t "$THREADS" -p "$PROMPT_LEN" -n "$GEN_LEN" -d "$depth" \
          -r "$REPS" -o json > "$json" 2> "$RUNDIR/json/${LABEL}_d${depth}.log"; then
       status=OK
