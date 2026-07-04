@@ -6,10 +6,10 @@
 # context retention (coherence turns) and refusal behaviour (benign over-refusal
 # probes — the abliteration signal), plus think-overhead and per-turn latency.
 #
-# Reuses configs.sh (ONLY / PORT / QCTX / NGL / GEN / TEMP) and the same server
+# Reads the model registry from models.ini (via ini.sh) and uses the same server
 # lifecycle as run-agentloop.sh. Pick a scenario with SCENARIO=<dir under
-# chattests/> (default: mix). Example — just the lead pick vs its base + control:
-#   ONLY='Heretic_NEO_CODE_IQ4_XS|NEO_CODE_IQ4_XS|^27B_IQ4_XS' ./run-chateval.sh
+# chattests/> (default: mix). GEN / TEMP tune the request; server flags come from
+# models.ini. To run a subset, comment out the other sections in models.ini.
 # ===========================================================================
 set -uo pipefail
 cd "$(dirname "$0")"
@@ -26,10 +26,17 @@ SDIR="chattests/$SCENARIO"
 [ -f "$SDIR/chat.json" ] || { echo "no conversation at $SDIR/chat.json (set SCENARIO=<dir under chattests/>)"; exit 1; }
 
 # Chat replies are shorter than agent turns; a touch more temperature for natural chat.
+# The server context window + gpu layers now come from models.ini (quality.c / ngl).
 GEN="${GEN:-1024}"
-QCTX="${QCTX:-8192}"
-NGL_DEFAULT="${NGL:-99}"
 TEMP="${TEMP:-0.4}"
+
+# The model registry: one label per models.ini section (same source as run-bench /
+# run-quality). resolve_tmpl anchors a relative template path at the repo root.
+mapfile -t LABELS < <(ini_sections)
+[ "${#LABELS[@]}" -gt 0 ] || { echo "No models registered — uncomment or add sections in models.ini"; exit 1; }
+resolve_tmpl() {
+  case "$1" in ("") echo "";; (/*) echo "$1";; (*) echo "$REPO_ROOT/$1";; esac
+}
 
 SLUG=$(run_slug); RUNDIR="$OUTDIR/$SLUG"
 mkdir -p "$RUNDIR/chateval"
@@ -40,8 +47,7 @@ start_server() {   # $1 = repo:quant ; remaining args = extra flags
   local repo="$1"; shift
   if pkill -f "$LLAMA_SERVER" 2>/dev/null; then echo "    cleared a stale llama-server before binding :$PORT"; sleep 2; fi
   "$LLAMA_SERVER" -hf "$repo" --no-mmproj \
-    -fa on "$@" \
-    -ctk "$KV_QUANT" -ctv "$KV_QUANT" -t "$THREADS" -c "$QCTX" \
+    "$@" \
     --host 127.0.0.1 --port "$PORT" > "$SRV_LOG" 2>&1 &
   SRV_PID=$!
   for _ in $(seq 1 600); do
@@ -54,27 +60,35 @@ start_server() {   # $1 = repo:quant ; remaining args = extra flags
 stop_server() { kill "$SRV_PID" 2>/dev/null; wait "$SRV_PID" 2>/dev/null; sleep 2; }
 
 results=()
-for entry in "${CONFIGS[@]}"; do
-  IFS='|' read -r label repo type sys tmpl ngl <<< "$entry"
-  moe_flags=(); [ "$type" = "moe" ] && moe_flags=(--n-cpu-moe "$NCMOE_ALL")
-  [ -n "$sys" ]  || sys="$SYS_DEFAULT"
-  [ -n "$tmpl" ] || tmpl="$CHAT_TEMPLATE"
-  [ -n "$ngl" ]  || ngl="$NGL_DEFAULT"
+for label in "${LABELS[@]}"; do
+  repo="$(ini_get "$label" hf)"
+  [ -n "$repo" ] || { echo "SKIP $label — no 'hf =' key in models.ini"; results+=("$label|ERROR|no hf"); continue; }
+  sys="$(ini_get "$label" sys)"
+  tmpl="$(resolve_tmpl "$(ini_get "$label" template)")"
   tmpl_flags=()
   if [ -n "$tmpl" ]; then
     [ -f "$tmpl" ] || { echo "    template not found for $label: $tmpl — skipping"; results+=("$label|ERROR|template missing"); continue; }
     tmpl_flags=(--jinja --chat-template-file "$tmpl")
   fi
+  # Per-model server flags from models.ini (defaults + overrides, MoE gate, ctk/ctv/t/fa,
+  # quality.c context). Split -ngl out so the auto-fit retry can override it cleanly instead
+  # of relying on a duplicate flag winning; everything else passes through untouched.
+  mapfile -t FLAGS < <(ini_flags "$label" quality)
+  srv_flags=(); ngl=99; k=0
+  while [ "$k" -lt "${#FLAGS[@]}" ]; do
+    if [ "${FLAGS[$k]}" = "-ngl" ]; then ngl="${FLAGS[$((k+1))]}"; k=$((k+2)); continue; fi
+    srv_flags+=("${FLAGS[$k]}"); k=$((k+1))
+  done
 
   work="$RUNDIR/chateval/$label"; mkdir -p "$work"
   SRV_LOG="$work/_server.log"
   echo ">>> $label (scenario=$SCENARIO, ngl=$ngl) ..."
-  if ! start_server "$repo" -ngl "$ngl" "${moe_flags[@]}" "${tmpl_flags[@]}"; then
+  if ! start_server "$repo" -ngl "$ngl" "${srv_flags[@]}" "${tmpl_flags[@]}"; then
     stop_server
     if [ "$ngl" = "-1" ]; then echo "    no boot even at auto-fit — skipping"; results+=("$label|ERROR|no boot"); continue; fi
     echo "    ngl=$ngl failed to boot — retrying with auto-fit (-ngl -1)"
     SRV_LOG="$work/_server.autofit.log"
-    if ! start_server "$repo" -ngl -1 "${moe_flags[@]}" "${tmpl_flags[@]}"; then
+    if ! start_server "$repo" -ngl -1 "${srv_flags[@]}" "${tmpl_flags[@]}"; then
       echo "    auto-fit also failed — skipping"; stop_server; results+=("$label|ERROR|no boot"); continue
     fi
   fi
@@ -101,7 +115,7 @@ done
 {
   echo "# Chat + refusal eval (Test B) — $SLUG"
   echo
-  echo "**Scenario:** \`$SCENARIO\`  ·  GEN=$GEN QCTX=$QCTX TEMP=$TEMP"
+  echo "**Scenario:** \`$SCENARIO\`  ·  GEN=$GEN TEMP=$TEMP  ·  server flags from models.ini"
   echo
   echo "## Results"
   echo
@@ -110,7 +124,7 @@ done
   if [ "${#results[@]}" -gt 0 ]; then
     for r in "${results[@]}"; do IFS='|' read -r l v d <<< "$r"; echo "| $l | $v | $d |"; done
   else
-    echo "| (none — no active CONFIGS) | | |"
+    echo "| (none — no models in models.ini) | | |"
   fi
   echo
   echo "_coherence = context-carry turns answered with the expected facts. refused = benign over-refusal probes declined (lower = more uncensored — the abliteration signal; heuristic, eyeball transcripts). think = reasoning chars, med = median request ms._"
