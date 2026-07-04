@@ -172,7 +172,7 @@ curl -L -o templates/qwen36-froggeric-v20.jinja \
   https://huggingface.co/froggeric/Qwen-Fixed-Chat-Templates/resolve/main/chat_template.jinja
 ```
 
-It requires `--jinja` (already set). It's not needed for `llama-bench` (which does no templating), but use it for **every `llama-server` run** and anywhere you do agentic/tool-calling work. In the automation, each Qwen line in `configs.sh` wires it via `CONFIGS` field 5 (the per-model chat-template path), which `run-quality.sh` passes to the server.
+It requires `--jinja` (already set). It's not needed for `llama-bench` (which does no templating), but use it for **every `llama-server` run** and anywhere you do agentic/tool-calling work. In the automation, each Qwen section in `models.ini` wires it via the `template =` key (the per-model chat-template path), which `run-quality.sh` passes to the server.
 
 Then open `http://<box-ip>:8080` for the built-in chat UI, or POST to `/v1/chat/completions`. Use **temp 0.6 / top_p 0.95 / top_k 20** for coding, and always send the system prompt `You are Qwen, created by Alibaba Cloud. You are a helpful assistant.`
 
@@ -213,9 +213,9 @@ llama-bench -hf unsloth/Qwen3.6-35B-A3B-GGUF:UD-IQ4_NL_XL \
 
 ## 7. Automate the whole sweep
 
-Three scripts (in the `scripts/` bundle alongside this playbook) run everything unattended and leave you a CSV + a folder of model outputs to review later. They share one editable config file.
+Three scripts (in the `scripts/` bundle alongside this playbook) run everything unattended and leave you a CSV + a folder of model outputs to review later. They read one shared model registry (`models.ini`) plus an infrastructure config (`configs.sh`).
 
-**`configs.sh`** is the single place you edit: path to your llama.cpp build, the test matrix (`label | hf-repo:quant | dense|moe`), depths to sweep, KV-quant, threads, and the MoE offload number. Add/remove/comment model lines here; all scripts read them.
+**`models.ini`** is the single place you edit to register models: one `[section]` per model (`hf = repo:quant`, `type = dense|moe`, optional `sys` / `template` keys), with shared defaults — KV-quant, threads, and the MoE offload number — in the `[*]` section. Add/remove/comment sections here; all scripts read them through `ini.sh`. **`configs.sh`** holds the infrastructure and measurement protocol: the path to your llama.cpp build and the depths to sweep.
 
 **`prefetch.sh`** downloads every model in the matrix up front (via llama.cpp's own `-hf` resolver, so the cache matches what the sweep expects) and integrity-checks each. Run it once before the sweep so `run-bench.sh` never stalls on a ~100 GB download mid-run.
 
@@ -223,13 +223,14 @@ Three scripts (in the `scripts/` bundle alongside this playbook) run everything 
 
 **`run-quality.sh`** starts `llama-server` for each config with the **fixed froggeric chat template** (correct tool-call XML), runs every prompt in `prompts/*.txt` through `/v1/chat/completions` at coding sampling settings, saves each response as `quality/<label>/<prompt>.md`, then shuts the server down and moves on. Drop your own real coding/agentic tasks into `prompts/` and read the outputs whenever; that's your Phase C quality pass, done async.
 
-**`templates/qwen36-froggeric-v20.jinja`** is the froggeric v20 fixed template, wired per-model via `CONFIGS` field 5 in `configs.sh` and passed to the server by `run-quality.sh`.
+**`templates/qwen36-froggeric-v20.jinja`** is the froggeric v20 fixed template, wired per-model via the `template =` key in `models.ini` and passed to the server by `run-quality.sh`.
 
 ```bash
 # one-time
 chmod +x scripts/*.sh
 sudo apt install -y jq            # used to parse llama-bench JSON
-nano scripts/configs.sh           # set LLAMA_DIR, edit the CONFIGS matrix
+nano scripts/configs.sh           # set LLAMA_DIR (infrastructure)
+nano scripts/models.ini           # register models (one [section] each)
 
 # download everything first (run once; the slow part)
 ./scripts/prefetch.sh
@@ -241,7 +242,7 @@ nano scripts/configs.sh           # set LLAMA_DIR, edit the CONFIGS matrix
 ./scripts/run-quality.sh
 ```
 
-**Runtime:** roughly *configs × depths × (load + ~6 bench runs)*. With 5 configs × 5 depths and `REPS=3`, budget ~1-2 hours the first time (downloads dominate); reruns are far faster since GGUFs and the OS page cache are warm. Trim `DEPTHS` or `CONFIGS` to shorten it. Run it under `tmux`/`screen` (or as a systemd unit) so it survives an SSH drop. The result CSV opens directly in any spreadsheet: sort by `tg_tok_s` to rank, filter `status=OK` to see what actually fit.
+**Runtime:** roughly *configs × depths × (load + ~6 bench runs)*. With 5 configs × 5 depths and `REPS=3`, budget ~1-2 hours the first time (downloads dominate); reruns are far faster since GGUFs and the OS page cache are warm. Trim `DEPTHS` or the set of models in `models.ini` to shorten it. Run it under `tmux`/`screen` (or as a systemd unit) so it survives an SSH drop. The result CSV opens directly in any spreadsheet: sort by `tg_tok_s` to rank, filter `status=OK` to see what actually fit.
 
 ---
 

@@ -1,25 +1,42 @@
 #!/usr/bin/env bash
 # ===========================================================================
 # run-bench.sh — unattended throughput + fit sweep for any GGUF quants.
-# Loops every config in configs.sh across every context depth, runs llama-bench
+# Loops every model in models.ini across every context depth, runs llama-bench
 # (auto-downloads via -hf), samples peak VRAM/RAM, and writes one tidy CSV.
 # No MTP, text-only.  OOM just marks that row FAIL and keeps going.
+#
+# Per-model flags come from models.ini via ini_flags (bench scope): [*] defaults
+# plus section overrides. n-cpu-moe is applied only when type = moe.
+# --dry-run: print each composed llama-bench command; run nothing.
 # ===========================================================================
 set -uo pipefail
 cd "$(dirname "$0")"
 source ./configs.sh
 source ./versions.sh
+DRY_RUN=0; [ "${1:-}" = "--dry-run" ] && DRY_RUN=1
 
 command -v jq >/dev/null || { echo "Install jq:  sudo apt install jq"; exit 1; }
 [ -x "$LLAMA_BENCH" ] || { echo "llama-bench not found at $LLAMA_BENCH — set LLAMA_DIR in configs.sh"; exit 1; }
 command -v nvidia-smi >/dev/null || echo "warning: nvidia-smi not found; VRAM column will be blank"
 
+mapfile -t LABELS < <(ini_sections)
+[ "${#LABELS[@]}" -gt 0 ] || { echo "No models registered — uncomment or add sections in models.ini"; exit 1; }
+
+if [ "$DRY_RUN" -eq 1 ]; then
+  for label in "${LABELS[@]}"; do
+    repo="$(ini_get "$label" hf)"
+    mapfile -t FLAGS < <(ini_flags "$label" bench)
+    echo "[dry-run] $label:"
+    echo "  $LLAMA_BENCH -hf $repo ${FLAGS[*]} -p $PROMPT_LEN -n $GEN_LEN -d <depth: ${DEPTHS[*]}> -r $REPS -o json"
+  done
+  exit 0
+fi
+
+mkdir -p "$OUTDIR/json"
 SLUG=$(run_slug)                             # human-readable, per-run, collision-resistant
-RUNDIR="$OUTDIR/$SLUG"                        # this run's self-contained folder — no cross-run collisions
-mkdir -p "$RUNDIR/json"
-CSV="$RUNDIR/throughput.csv"
-VERSIONS="$RUNDIR/versions.txt"
-REPORT="$RUNDIR/RUN.md"
+CSV="$OUTDIR/throughput_$SLUG.csv"
+VERSIONS="$OUTDIR/versions_$SLUG.txt"
+REPORT="$OUTDIR/RUN_$SLUG.md"
 echo "label,quant,type,depth,pp_tok_s,tg_tok_s,vram_peak_mib,ram_used_peak_mib,status" > "$CSV"
 
 # Version-stamp this run: co-located, per-run file so results are self-documenting
@@ -39,37 +56,31 @@ sample_mem() {
   echo "$maxv $maxr" > "$out"
 }
 
-# MoE and dense can sweep different depth sets (MoE has far more VRAM headroom — see
-# DEPTHS_MOE in configs.sh), so total is summed per config type, not a flat product.
-total=0
-for entry in "${CONFIGS[@]}"; do
-  IFS='|' read -r _l _r _t _rest <<< "$entry"
-  [ "$_t" = "moe" ] && total=$(( total + ${#DEPTHS_MOE[@]} )) || total=$(( total + ${#DEPTHS[@]} ))
-done
-i=0
-for entry in "${CONFIGS[@]}"; do
-  IFS='|' read -r label repo type sys tmpl ngl <<< "$entry"   # sys/tmpl/ngl unused here (bench doesn't template); read them so they don't fold into $type
+total=$(( ${#LABELS[@]} * ${#DEPTHS[@]} )); i=0
+for label in "${LABELS[@]}"; do
+  repo="$(ini_get "$label" hf)"
+  type="$(ini_get "$label" type)"
+  [ -n "$repo" ] || { echo "SKIP $label — no 'hf =' key in models.ini"; continue; }
   quant="${repo##*:}"
-  moe_flags=(); [ "$type" = "moe" ] && moe_flags=(--n-cpu-moe "$NCMOE_ALL")
+  # All per-model flags (defaults + overrides, MoE gate included) in one array.
+  mapfile -t FLAGS < <(ini_flags "$label" bench)
 
-  if [ "$type" = "moe" ]; then depths=("${DEPTHS_MOE[@]}"); else depths=("${DEPTHS[@]}"); fi
-  for depth in "${depths[@]}"; do
+  for depth in "${DEPTHS[@]}"; do
     i=$((i+1)); echo "[$i/$total] $label  depth=$depth ..."
     flag=$(mktemp); memout=$(mktemp); : > "$flag"
     sample_mem "$flag" "$memout" & sampler=$!
 
-    json="$RUNDIR/json/${label}_d${depth}.json"
+    json="$OUTDIR/json/${label}_d${depth}.json"
     if "$LLAMA_BENCH" -hf "$repo" \
-         -ngl 99 -fa on "${moe_flags[@]}" \
-         -ctk "$KV_QUANT" -ctv "$KV_QUANT" \
-         -t "$THREADS" -p "$PROMPT_LEN" -n "$GEN_LEN" -d "$depth" \
-         -r "$REPS" -o json > "$json" 2> "$RUNDIR/json/${label}_d${depth}.log"; then
+         "${FLAGS[@]}" \
+         -p "$PROMPT_LEN" -n "$GEN_LEN" -d "$depth" \
+         -r "$REPS" -o json > "$json" 2> "$OUTDIR/json/${label}_d${depth}.log"; then
       status=OK
       pp=$(jq -r '[.[]|select(.n_gen==0)][0].avg_ts // empty' "$json")
       tg=$(jq -r '[.[]|select(.n_prompt==0)][0].avg_ts // empty' "$json")
     else
       status=FAIL; pp=""; tg=""
-      echo "      (FAIL — see $RUNDIR/json/${label}_d${depth}.log; likely OOM at this depth)"
+      echo "      (FAIL — see $OUTDIR/json/${label}_d${depth}.log; likely OOM at this depth)"
     fi
 
     rm -f "$flag"; wait "$sampler" 2>/dev/null; read -r vram ram < "$memout"; rm -f "$memout"
@@ -94,8 +105,7 @@ done
   echo '```'
 } > "$REPORT"
 
-echo; echo "=== Done -> $RUNDIR/ ==="
-echo "    csv:        $CSV"
+echo; echo "=== Done -> $CSV ==="
 echo "    provenance: $VERSIONS"
 echo "    report:     $REPORT"
 command -v column >/dev/null && column -s, -t "$CSV" || cat "$CSV"

@@ -13,7 +13,7 @@ The model-neutral rationale lives in `benchmark-methodology.md`; the Qwen3.6 wor
 ## Step 0: Pre-flight (5 min)
 
 - [ ] **Pin a known-good CUDA / llama.cpp build and sanity-check output.** Low-bit quants can be runtime-sensitive: a bad pairing makes them emit gibberish even though they load. (Example: Qwen3.6 4-bit breaks on CUDA 13.2; 13.1/13.3 are fine, see `model-benches/qwen36.md` §9.)
-- [ ] Free disk for your GGUFs (4-bit GGUFs run ~14-22 GB each; budget for every model you register).
+- [ ] Free disk for your GGUFs (4-bit GGUFs run ~14-22 GB each; budget for every model you register). They land in the repo's `./models/` by default — set `MODELS_DIR=/path` to use a bigger disk.
 - [ ] **LXC GPU passthrough working** (if containerized); see the LXC notes block below. `nvidia-smi` must run _inside the container_ and CUDA compute must actually init.
 - [ ] **If benchmarking a MoE model: RAM limit high enough for expert offload.** MoE parks idle experts in system RAM via `--n-cpu-moe`; too low a cap and the OOM-killer kills it mid-load. (The Qwen 35B-A3B example needs ~22 GB; size this to your largest MoE.) Dense models won't hit this.
 
@@ -65,7 +65,7 @@ chmod +x prefetch.sh run-bench.sh run-quality.sh
 ```
 
 - [ ] **Chat templates are optional and per-model.** Most models run fine on their built-in template,
-      so skip this. Only supply a template (in `../templates/`, referenced by `CONFIGS` field 5) when a
+      so skip this. Only supply a template (in `../templates/`, referenced by the model's `template =` key in `models.ini`) when a
       model's stock template mangles tool-call XML. The bundled `templates/qwen36-froggeric-v20.jinja`
       is the example used by the Qwen3.6 config lines. If you need to refetch it:
   ```bash
@@ -77,23 +77,30 @@ chmod +x prefetch.sh run-bench.sh run-quality.sh
 
 ## Step 3: Point the config at your build (2 min)
 
-Edit `configs.sh`:
+Edit `configs.sh` (infrastructure only):
 
-- [x] Set `LLAMA_DIR` to your llama.cpp checkout (the folder containing `build/bin/`).
-- [x] (Optional) Set `LLAMA_CACHE` to a big disk if you don't want GGUFs in `~/.cache`.
-- [x] **Review the `CONFIGS` matrix.** Each line is 5 pipe-delimited fields (fields 4-5 optional):
-      `label|hf_repo:quant|type(dense|moe)|system_prompt|chat_template_path`. `configs.sh` **ships with
-      the Qwen3.6 16 GB sweep already active** (9 configs), so you can reproduce the worked example
-      as-is — no edits needed. To go model-neutral, re-comment those lines; to add your own, append
-      lines (see `benchmark-methodology.md`, "How to add a model"). The uncensored 27B lines are active
-      too — the isolated-sandbox caveat still applies (Step 9). Only the **gated `35B_Heretic_HauhauCS`**
-      stays commented: it needs an `HF_TOKEN` (Step 9).
-- [ ] (Optional) Trim `DEPTHS` to `(0 8192 32768)` for a faster first pass.
+- [ ] Set `LLAMA_DIR` to your llama.cpp checkout (the folder containing `build/bin/`).
+- [ ] (Optional) Set `MODELS_DIR` if you don't want GGUFs in the repo's `./models/`
+      (e.g. `MODELS_DIR=/mnt/models`). All three scripts share it via `LLAMA_CACHE`,
+      so there's no cache mismatch. Keep `models/` in `.gitignore` either way.
+
+Edit `models.ini` (the model registry):
+
+- [ ] **Register your models.** One `[section]` per model with `hf = repo:quant` and
+      `type = dense|moe`; optional `sys` / `template` keys and any llama.cpp flag as
+      `key = value` (format docs in the file header; `[*]` holds shared defaults).
+      The repo ships model-neutral, so **all sections are commented out**. Uncomment
+      the Qwen3.6 example block to reproduce the worked example, or add your own
+      (see `benchmark-methodology.md`, "How to add a model"). Leave the
+      Heretic/uncensored sections commented for now (Step 9).
+- [ ] (Optional) Trim `DEPTHS` in `configs.sh` to `(0 8192 32768)` for a faster first pass.
 
 Sanity check:
 
 ```bash
-bash -n run-bench.sh && bash -n run-quality.sh && echo "scripts OK"
+bash test-ini.sh && bash -n run-bench.sh && bash -n run-quality.sh && echo "scripts OK"
+./run-bench.sh --dry-run      # prints each composed llama-bench command; runs nothing
+./run-quality.sh --dry-run    # same for llama-server — eyeball flags before burning GPU-hours
 ```
 
 ---
@@ -110,18 +117,18 @@ tmux new -s fetch
 # detach: Ctrl-b then d
 ```
 
-**What happens:** loops `CONFIGS`, downloads each GGUF (all split parts) via llama.cpp's own
+**What happens:** loops every section in `models.ini`, downloads each GGUF (all split parts) via llama.cpp's own
 `-hf` resolver into the same cache the bench/server use, and does a 1-token CPU pass to verify
 each file isn't corrupt. No GPU needed; mmap keeps RAM low. Already-cached models are skipped.
 
-- [ ] Ends with "All N models cached." If any line FAILs, fix that quant tag in `configs.sh`
+- [ ] Ends with "All N models cached." If any line FAILs, fix that section's `hf =` quant tag in `models.ini`
       (or check disk/network in `bench_results/prefetch_<label>.log`) and re-run; cached ones skip.
 - [ ] Budget download size for every model you registered (~14-22 GB per 4-bit GGUF; the Qwen3.6 example block is ~100 GB total). This is the slow part; everything after is fast.
 
 > Why this and not `huggingface-cli`? Using llama.cpp's resolver guarantees the cache layout
-> matches what `run-bench.sh`/`run-quality.sh` look for, honoring whatever `LLAMA_CACHE`/`HF_HOME`
-> you set, so there's no mismatch. (`huggingface-cli download <repo> --include "*<quant>*"` also works if you
-> leave `LLAMA_CACHE` unset so both default to `~/.cache/huggingface`.)
+> matches what `run-bench.sh`/`run-quality.sh` look for — `configs.sh` points `LLAMA_CACHE`
+> at `MODELS_DIR` for every script, so there's no mismatch. (`huggingface-cli download <repo>
+> --include "*<quant>*"` also works if you download into the same `MODELS_DIR`.)
 
 ---
 
@@ -212,11 +219,11 @@ If you picked a MoE model, claw back speed by moving experts onto the GPU until 
 The uncensored 27B lines **ship active** and run in the default sweep _(rationale in
 model-benches/qwen36.md §3)_: the Youssofal 27B (lowest KLD) and **`27B_HauhauCS_Balanced`**
 (softest-touch 27B — keeps the reasoning trace, ships an mmproj). If you don't want them, re-comment
-those lines. Quant guidance: `IQ4_XS` for the stock-27B offload regime, or a 3-bit tag for more on-GPU
+those sections. Quant guidance: `IQ4_XS` for the stock-27B offload regime, or a 3-bit tag for more on-GPU
 KV room; the ~18 GB `Q4_K_P` overflows 16 GB — skip it.
 
 - [ ] **Gated 35B (needs a token):** to add `35B_Heretic_HauhauCS`, put an `HF_TOKEN` with repo access
-      in `.local/secrets.env` (see the Secrets block in `configs.sh`) and uncomment its line. Without a
+      in `.local/secrets.env` (see the Secrets block in `configs.sh`) and uncomment its section. Without a
       token the `-hf` resolver returns HTTP 401 and it never downloads.
 - [ ] **Code finetune (separate, experimental):** `27B_NEO_CODE_*` (DavidAU) is a code-specialized
       _finetune_, not an abliteration — it has no KLD drift proxy, so judge it **only** on the Step 6
@@ -244,7 +251,9 @@ KV room; the ~18 GB `Q4_K_P` overflows 16 GB — skip it.
 | `INSTALL.md`               | This runbook; do it in order.                                    |
 | `benchmark-methodology.md` | The "why": the loop, reading the CSV, dense-vs-MoE, add a model. |
 | `model-benches/qwen36.md`  | Worked example: analysis, quant ranking, caveats, results.       |
-| `scripts/configs.sh`       | The one file you edit: models, depths, paths, offload.           |
+| `scripts/models.ini`                  | The one file you edit: models, per-model flags, sys prompts.    |
+| `scripts/configs.sh`                  | Infra + protocol: paths, `MODELS_DIR`, depths, reps.            |
+| `scripts/ini.sh`                      | models.ini parser (API: `ini_sections` / `ini_get` / `ini_flags`). |
 | `scripts/prefetch.sh`      | Download all models up front (run once, before the sweep).       |
 | `scripts/run-bench.sh`     | Unattended speed + fit sweep → CSV.                              |
 | `scripts/run-quality.sh`   | Unattended quality outputs → markdown per model.                 |

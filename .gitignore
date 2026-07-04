@@ -15,3 +15,5 @@ plans/
 # Downloaded GGUFs / HF cache, if ever placed in-tree
 *.gguf
 llama-cache/
+# Model GGUFs live here by default (MODELS_DIR); 14-22 GB each — never commit.
+models/

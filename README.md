@@ -3,9 +3,10 @@
 A repeatable way to benchmark **any GGUF model family** (dense or MoE) at 4-bit and beyond under
 `llama.cpp` on a **16 GB NVIDIA GPU**, and pick a daily driver from real speed/fit/quality numbers.
 
-The **engine is model-neutral** — the scripts are driven entirely by the `CONFIGS` matrix in one
-config file, so any model family drops in. `configs.sh` ships with an **active Qwen3.6 16 GB sweep**
-(the worked example below); re-comment those lines to go fully neutral, or swap in your own. The
+The **engine is model-neutral** — the scripts are driven entirely by the `models.ini` registry, so
+any model family drops in. The repo ships model-neutral: the Qwen3.6 example (the worked example
+below) lives as a **commented-out** block in `models.ini`, so uncomment it to reproduce the example,
+or add your own `[section]`s. The
 numbers and fit ceilings in the included worked example were measured on one **reference
 configuration**, a Proxmox LXC container with a passed-through **RTX 4070 Ti Super (16 GB)** on a
 **7800X3D** host, with **24 GB RAM and 8 cores allocated to the container**. Those are the
@@ -53,8 +54,10 @@ model-benches/              ← per-model worked writeups (analysis, quant ranki
 templates/                  ← optional per-model chat templates (drop your model's .jinja here).
   qwen36-froggeric-v20.jinja←   Qwen3.6 tool-call template (referenced by the Qwen example config).
 scripts/
-  configs.sh         ← the ONE file you edit (set LLAMA_DIR, register models)
-  prefetch.sh        ← download all models up front (run once)
+  models.ini         ← the ONE file you edit: register models ([*] defaults + per-model overrides)
+  configs.sh         ← infra + measurement protocol (LLAMA_DIR, depths, reps, output paths)
+  ini.sh             ← models.ini parser, sourced by all scripts (tested by test-ini.sh)
+  prefetch.sh        ← download all models up front (run once) -> ./models by default
   run-bench.sh       ← unattended speed + fit sweep -> CSV
   run-quality.sh     ← unattended quality outputs -> markdown per model
   serve-*.sh         ← launch llama-server on a picked config (see "Serve a model" above)
@@ -68,7 +71,8 @@ cd localai-16gb-bench
 
 chmod +x scripts/*.sh
 sudo apt install -y jq
-nano scripts/configs.sh        # set LLAMA_DIR, then register your models in CONFIGS
+nano scripts/configs.sh        # set LLAMA_DIR (skip if llama.cpp is at ~/llama.cpp)
+nano scripts/models.ini        # register your models (one [section] each)
 
 cd scripts
 ./prefetch.sh                  # downloads your models (run once, slow)
@@ -91,16 +95,23 @@ that lands on the known-bad CUDA 13.2 warns loudly.
 
 ### Registering a model
 
-`CONFIGS` in `scripts/configs.sh` is the only place a model lives. Each line is:
+`scripts/models.ini` is the only place a model lives. One section per model:
 
-```
-label | hf_repo:quant | type(dense|moe) | system_prompt(optional) | chat_template_path(optional)
+```ini
+[my-model-q4]
+hf = org/My-Model-GGUF:Q4_K_M
+type = dense            ; or moe — the only key that triggers --n-cpu-moe
 ```
 
-The repo ships with the Qwen3.6 lines **commented out** as a worked example (they also show how the
-optional system-prompt and template fields are used). Uncomment them, or add your own, and the line
-flows through prefetch → bench → quality unchanged. See `benchmark-methodology.md` for the full "add
-a model" recipe and `model-benches/qwen36.md` for an example writeup.
+Shared defaults live in the `[*]` section (KV quant, threads, ngl, MoE offload) and any
+key can be overridden per model. Keys other than the reserved four (`hf`, `type`, `sys`,
+`template`) pass straight through to the llama.cpp command line, so a model that needs
+`temp = 1.0` or `quality.b = 2048` just says so in its section — no script edits, ever.
+Prefix a key with `bench.` or `quality.` to apply it to only one script. Full format
+docs are in the header of `models.ini`.
+
+GGUFs download to the repo's `./models/` by default (gitignored); point `MODELS_DIR`
+at a bigger disk to relocate everything.
 
 ## Two things that will save you a headache
 
