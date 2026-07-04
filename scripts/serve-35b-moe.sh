@@ -8,7 +8,7 @@
 #         Idle experts live in system RAM (--n-cpu-moe), so the real ceiling is
 #         RAM, not VRAM; peaked at ~3.8 GB RAM at 255k on the reference box.
 #
-# Flags mirror the benchmark harness exactly (run-quality.sh / configs.sh):
+# Flags mirror the benchmark harness exactly (run-quality.sh / models.ini):
 #   -ngl 99          attention + active tensors on GPU
 #   --n-cpu-moe 99   offload idle expert FFN tensors to system RAM (the MoE win)
 #   -fa on           flash attention
