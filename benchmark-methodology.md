@@ -53,8 +53,8 @@ footprint. So a MoE GGUF is often larger than its "active params" suggest and wo
 the GPU. This is **tolerant for MoE** (only a few experts fire per token, so RAM bandwidth rarely
 bottlenecks) but **costly for dense** (every parameter fires every token). Practical consequence on
 16 GB: a big MoE offloaded to RAM can feel *faster* than a dense model that barely spills, and the
-real ceiling for MoE is your **system RAM**, not VRAM. Tune `NCMOE_ALL` down to pull experts back
-onto the GPU until VRAM ~fills, for more speed.
+real ceiling for MoE is your **system RAM**, not VRAM. Lower the `n-cpu-moe` value (in `models.ini`
+`[*]`, or per-section) to pull experts back onto the GPU until VRAM ~fills, for more speed.
 
 ## General caveats (verify per model)
 
