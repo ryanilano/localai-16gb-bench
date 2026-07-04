@@ -15,7 +15,7 @@
 #         Tradeoff vs the IQ3_M winner (serve-27b-uncensored.sh): higher quality
 #         per token, but ~49k max context instead of 80k, and it leans on q4_0 KV.
 #
-# Flags mirror the benchmark harness exactly (run-quality.sh / configs.sh) so the
+# Flags mirror the benchmark harness exactly (run-quality.sh / models.ini) so the
 # running server behaves like the thing that was measured:
 #   -ngl 99          full offload (dense — everything on GPU, no --n-cpu-moe)
 #   -fa on           flash attention

@@ -10,7 +10,7 @@
 #         confirmed OK all the way to 80k at ~15.4 GB VRAM (~0.9 GB under the
 #         16 GB wall); performance-identical to base NEO-CODE IQ3_M (±0.1 tg).
 #
-# Flags mirror the benchmark harness exactly (run-quality.sh / configs.sh) so
+# Flags mirror the benchmark harness exactly (run-quality.sh / models.ini) so
 # the running server behaves like the thing that was measured:
 #   -ngl 99   full offload (dense — everything on GPU, no --n-cpu-moe)
 #   -fa on    flash attention
