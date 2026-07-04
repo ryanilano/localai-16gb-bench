@@ -16,6 +16,33 @@ container's allocated resources, so adapt the limits to whatever you run on.
 **Open `INSTALL.md` and follow it top to bottom.** That's the whole job: ordered, copy-paste
 commands with checkboxes. Everything else is support material.
 
+## Serve a model
+
+Once `llama.cpp` is built and the model is fetched (per `INSTALL.md`), these launch `llama-server`
+with the **exact flags each config was benchmarked at**, so the running server behaves like the thing
+that was measured. They serve an OpenAI-compatible API on `http://127.0.0.1:8080`. _(Picks are from
+the included Qwen3.6 worked example — see `model-benches/qwen36.md`.)_
+
+```bash
+cd scripts
+
+# Daily driver — best all-round quality + long context.
+# Dense Heretic NEO-CODE IQ3_M, ~80k ctx, ~40 tok/s, q8_0 KV.
+./serve-27b-uncensored.sh
+
+# Max dense quality with real context.
+# Same model at higher-fidelity IQ4_XS; q4_0 KV unlocks ~49k ctx (q8_0 caps ~16k).
+./serve-27b-iq4xs.sh
+
+# Max context + fastest generation.
+# 35B MoE UD-Q3_K_M, ~256k ctx at ~6 GB VRAM (RAM-bound), ~58 tok/s.
+./serve-35b-moe.sh
+```
+
+Every tunable is env-overridable, e.g. `CTX=32768 PORT=9000 HOST=0.0.0.0 ./serve-27b-uncensored.sh`
+(set `HOST=0.0.0.0` to reach it from another machine). Each script's header documents why that config
+was picked and its caveats.
+
 ## What's in the box
 
 ```
@@ -30,6 +57,7 @@ scripts/
   prefetch.sh        ← download all models up front (run once)
   run-bench.sh       ← unattended speed + fit sweep -> CSV
   run-quality.sh     ← unattended quality outputs -> markdown per model
+  serve-*.sh         ← launch llama-server on a picked config (see "Serve a model" above)
 ```
 
 ## 60-second version
