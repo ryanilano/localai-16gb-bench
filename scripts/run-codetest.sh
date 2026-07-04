@@ -70,7 +70,20 @@ stop_server() { kill "$SRV_PID" 2>/dev/null; wait "$SRV_PID" 2>/dev/null; sleep 
 
 # Pull Python out of the answer: concatenate every ``` fenced block. The model is
 # asked for a single implementation block; concatenating is robust if it splits.
-extract_code() { awk 'BEGIN{inb=0} /^[[:space:]]*```/{inb=!inb; next} inb{print}'; }
+extract_code() {
+  local text fenced
+  text=$(cat)
+  fenced=$(printf '%s
+' "$text" | awk 'BEGIN{inb=0} /^[[:space:]]*```/{inb=!inb; next} inb{print}')
+  if [ -n "$(printf '%s' "$fenced" | tr -d '[:space:]')" ]; then
+    printf '%s
+' "$fenced"
+  elif printf '%s
+' "$text" | grep -qE '^[[:space:]]*(class|def|import|from)[[:space:]]'; then
+    printf '%s
+' "$text"
+  fi
+}
 
 results=()   # "label|verdict|detail" rows for the report
 for label in "${LABELS[@]}"; do
