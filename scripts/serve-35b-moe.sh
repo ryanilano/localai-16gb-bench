@@ -28,7 +28,7 @@ NCMOE="${NCMOE:-99}"                # idle experts -> RAM; lower it to pull expe
 KV_QUANT="${KV_QUANT:-q8_0}"
 THREADS="${THREADS:-8}"
 PORT="${PORT:-8080}"
-HOST="${HOST:-127.0.0.1}"
+HOST="${HOST:-0.0.0.0}"
 # System prompt is set per-request by the API client (a {role:"system"} message),
 # exactly as the benchmark harness does — current llama-server has no server-side
 # system-prompt flag, so there is nothing to bake in at launch.
