@@ -29,7 +29,9 @@ KV_QUANT="${KV_QUANT:-q8_0}"
 THREADS="${THREADS:-8}"
 PORT="${PORT:-8080}"
 HOST="${HOST:-127.0.0.1}"
-SYS_PROMPT="${SYS_PROMPT:-You are Qwen, created by Alibaba Cloud. You are a helpful assistant.}"
+# System prompt is set per-request by the API client (a {role:"system"} message),
+# exactly as the benchmark harness does — current llama-server has no server-side
+# system-prompt flag, so there is nothing to bake in at launch.
 TEMPLATE="${TEMPLATE:-$(cd .. && pwd)/templates/qwen36-froggeric-v20.jinja}"
 
 # --- Preflight --------------------------------------------------------------
@@ -47,5 +49,4 @@ exec "$LLAMA_SERVER" \
   -ctk "$KV_QUANT" -ctv "$KV_QUANT" \
   -t "$THREADS" \
   --jinja --chat-template-file "$TEMPLATE" \
-  --system-prompt "$SYS_PROMPT" \
   --host "$HOST" --port "$PORT"
