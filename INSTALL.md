@@ -5,8 +5,8 @@ The model-neutral rationale lives in `benchmark-methodology.md`; the Qwen3.6 wor
 (used throughout this runbook to make things concrete) is `model-benches/qwen36.md`.
 
 **Files you have:** `benchmark-methodology.md` (the "why") · `model-benches/` (per-model writeups) ·
-`templates/` (optional per-model chat templates) · `scripts/` (`configs.sh`, `prefetch.sh`,
-`run-bench.sh`, `run-quality.sh`).
+`templates/` (optional per-model chat templates) · `scripts/` (`models.ini`, `configs.sh`,
+`prefetch.sh`, `run-bench.sh`, `run-quality.sh`).
 
 ---
 
@@ -91,8 +91,8 @@ Edit `models.ini` (the model registry):
       `key = value` (format docs in the file header; `[*]` holds shared defaults).
       The repo ships model-neutral, so **all sections are commented out**. Uncomment
       the Qwen3.6 example block to reproduce the worked example, or add your own
-      (see `benchmark-methodology.md`, "How to add a model"). Leave the
-      Heretic/uncensored sections commented for now (Step 9).
+      (see `benchmark-methodology.md`, "How to add a model"). The uncensored/Heretic
+      variants aren't in the shipped registry — add them in Step 9 if you want them.
 - [ ] (Optional) Trim `DEPTHS` in `configs.sh` to `(0 8192 32768)` for a faster first pass.
 
 Sanity check:
@@ -136,9 +136,7 @@ each file isn't corrupt. No GPU needed; mmap keeps RAM low. Already-cached model
 
 ```bash
 tmux new -s bench          # so it survives an SSH drop
-./run-bench.sh                          # default sweep: depths 0-32k (~18-60 min)
-# — or, for the deep context sweep —
-BENCH_PROFILE=longctx ./run-bench.sh    # dense→80k, MoE→256K native (~1.25-1.5 hr)
+./run-bench.sh                          # sweeps depths 0-32k (~18-60 min)
 # detach: Ctrl-b then d   |   reattach: tmux attach -t bench
 ```
 
@@ -146,11 +144,11 @@ BENCH_PROFILE=longctx ./run-bench.sh    # dense→80k, MoE→256K native (~1.25-
 runs `llama-bench`, samples peak VRAM/RAM, and appends a row to `bench_results/throughput_<stamp>.csv`.
 OOM at a depth just writes `status=FAIL` and continues.
 
-**Depth profiles.** The default profile sweeps `0 4096 8192 16384 32768`. Setting
-`BENCH_PROFILE=longctx` sweeps deeper — dense configs to 80k (their VRAM ceiling on 16 GB) and MoE
-configs to the full 256K native window (experts live in RAM, so only attention KV sits on the GPU).
-Both arrays live in `configs.sh` (`DEPTHS` / `DEPTHS_MOE`); edit them to customize. The longctx run is
-much slower because the deep MoE rungs each prefill ~200K+ tokens — expect ~1.25-1.5 hr.
+**Depth grid.** The sweep runs `DEPTHS=(0 4096 8192 16384 32768)` from `configs.sh` for every
+config. To probe deeper context — dense to its ~80k VRAM ceiling, or a MoE toward its native window
+(experts live in RAM, so only attention KV sits on the GPU) — edit the `DEPTHS` array in
+`configs.sh`. A deeper grid is much slower: each deep rung prefills that many tokens before it
+measures generation.
 
 - [ ] Script finishes and prints a results table.
 - [ ] Open the CSV in a spreadsheet. **Decisions to make from it:**
@@ -208,7 +206,7 @@ on _(see model-benches/qwen36.md §10)_:
 
 If you picked a MoE model, claw back speed by moving experts onto the GPU until VRAM ~fills:
 
-- [ ] In `configs.sh` lower `NCMOE_ALL` from `99` in steps (e.g. 99 → 32 → 24 → 20).
+- [ ] In `models.ini`, lower the MoE section's `n-cpu-moe` from `99` in steps (e.g. 99 → 32 → 24 → 20); a per-section value overrides the `[*]` default.
 - [ ] Re-run just that one config (comment out the others) and watch `vram_peak_mib`.
 - [ ] Stop at the lowest number that still loads at your target context without OOM; that's your fastest stable setting.
 
@@ -216,11 +214,12 @@ If you picked a MoE model, claw back speed by moving experts onto the GPU until 
 
 ## Step 9: (Optional) Uncensored / Heretic track
 
-The uncensored 27B lines **ship active** and run in the default sweep _(rationale in
-model-benches/qwen36.md §3)_: the Youssofal 27B (lowest KLD) and **`27B_HauhauCS_Balanced`**
-(softest-touch 27B — keeps the reasoning trace, ships an mmproj). If you don't want them, re-comment
-those sections. Quant guidance: `IQ4_XS` for the stock-27B offload regime, or a 3-bit tag for more on-GPU
-KV room; the ~18 GB `Q4_K_P` overflows 16 GB — skip it.
+These variants aren't in the shipped registry (models.ini is model-neutral); add them as
+`models.ini` sections if you want them _(rationale + the full variant table in
+model-benches/qwen36.md §3)_. The two softest-touch 27B picks: the Youssofal abliteration (lowest
+KLD) and the HauhauCS-Balanced 27B (keeps the reasoning trace, ships an mmproj). Quant guidance:
+`IQ4_XS` for the stock-27B offload regime, or a 3-bit tag for more on-GPU KV room; the ~18 GB
+`Q4_K_P` overflows 16 GB — skip it.
 
 - [ ] **Gated / private repos (need a token):** for any gated GGUF repo, `export HF_TOKEN=hf_...` (from an
       account with access) before running, then add or uncomment its section in `models.ini`. Without a

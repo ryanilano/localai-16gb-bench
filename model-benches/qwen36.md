@@ -105,11 +105,11 @@ On llama.cpp, **MTP + vision (`--mmproj`) can't run together yet**, and most Her
 - **27B (quality-retention):** Youssofal abliterated (lowest KLD) at Q4_K_M.
 - **35B-A3B (speed + MTP):** llmfan46 MTP-Preserved at Q4_K, expert-offload to RAM like the stock MoE.
 
-> Run these through the **same scripts** as the stock models (just add their lines to `configs.sh`). The KLD numbers are the vendors' own; your Phase C quality pass is what actually decides whether abliteration cost you anything.
+> Run these through the **same scripts** as the stock models (just add their sections to `models.ini`). The KLD numbers are the vendors' own; your Phase C quality pass is what actually decides whether abliteration cost you anything.
 
 ### Code-specialized finetunes (separate from the abliteration track)
 
-`DavidAU/Qwen3.6-27B-NEO-CODE-Di-IMatrix-MAX-GGUF` is a code/creative **finetune** of the 27B dense, not an abliteration — so **there is no KLD-vs-base drift proxy** to reason about, and the card's "stronger than base" style claims are not coding evidence (see §closing note). Its only justification is your own Phase-C coding pass. Two practical notes for 16 GB: it's an "IMatrix-**MAX**" repo (embeddings/output kept high-precision), so files run *larger* than a stock tag of the same name — `IQ4_XS` is already ~15.4 GB (stock-27B offload regime), `IQ3_M` (~12.9 GB) fits with KV room, and `Q4_K_M` (~16.9 GB) exceeds 16 GB VRAM. Commented-out lines are in `configs.sh` under the "code-specialized finetune" block.
+`DavidAU/Qwen3.6-27B-NEO-CODE-Di-IMatrix-MAX-GGUF` is a code/creative **finetune** of the 27B dense, not an abliteration — so **there is no KLD-vs-base drift proxy** to reason about, and the card's "stronger than base" style claims are not coding evidence (see §closing note). Its only justification is your own Phase-C coding pass. Two practical notes for 16 GB: it's an "IMatrix-**MAX**" repo (embeddings/output kept high-precision), so files run *larger* than a stock tag of the same name — `IQ4_XS` is already ~15.4 GB (stock-27B offload regime), `IQ3_M` (~12.9 GB) fits with KV room, and `Q4_K_M` (~16.9 GB) exceeds 16 GB VRAM. Add it as a `models.ini` section to bench it — the shipped registry is model-neutral, so no model lines are active by default.
 
 ---
 
@@ -267,9 +267,9 @@ nano scripts/models.ini           # register models (one [section] each)
 
 †Not a 4-bit quant, but `UD-Q3_K_M` (~16.6 GB) is the one config that gets the **MoE mostly into 16 GB VRAM**, worth keeping as the "max-speed, accept slight quality loss" option, and it directly answers the Q3_K_M-vs-Q4 question.
 
-‡The `35B_Heretic_HauhauCS` repo (`fredrezones55/…HauhauCS-Aggressive`) is **gated/private**: the `-hf` resolver returns HTTP 401 and the model never downloads without a valid `HF_TOKEN` (put one in `.local/secrets.env` — see the Secrets block in `configs.sh`). Separately, `27B_Heretic_Youssofal_Q3_K_L` was removed: `Q3_K_L` is **not** published by Youssofal (§3 shows `Q4_K_M / Q3_K_M / Q2_K`), so it returned "no GGUF files found" and never loaded in the 2026-07-02 runs. Use `Q3_K_M` for on-GPU 3-bit.
+‡The `35B_Heretic_HauhauCS` repo (`fredrezones55/…HauhauCS-Aggressive`) is **gated/private**: the `-hf` resolver returns HTTP 401 and the model never downloads without a valid `HF_TOKEN` (`export HF_TOKEN=hf_...` from an account with access before running). Separately, `27B_Heretic_Youssofal_Q3_K_L` was removed: `Q3_K_L` is **not** published by Youssofal (§3 shows `Q4_K_M / Q3_K_M / Q2_K`), so it returned "no GGUF files found" and never loaded in the 2026-07-02 runs. Use `Q3_K_M` for on-GPU 3-bit.
 
-§`NEO_CODE` is a **finetune**, not an abliteration — no KLD drift proxy, so it lives in its own `configs.sh` block and is justified only by your Phase-C coding pass (see §3, "Code-specialized finetunes"). Both its tags (`IQ4_XS`, `IQ3_M`) are on DavidAU's HF repo; `Q4_K_M` (~16.9 GB) exceeds 16 GB VRAM and is intentionally omitted.
+§`NEO_CODE` is a **finetune**, not an abliteration — no KLD drift proxy, so it belongs in its own `models.ini` section and is justified only by your Phase-C coding pass (see §3, "Code-specialized finetunes"). Both its tags (`IQ4_XS`, `IQ3_M`) are on DavidAU's HF repo; `Q4_K_M` (~16.9 GB) exceeds 16 GB VRAM and is intentionally omitted.
 
 ---
 
