@@ -7,7 +7,7 @@ full worked example). This doc is model-neutral.
 
 ## The loop
 
-1. **Register** the models you want to compare, one line each in `scripts/configs.sh` `CONFIGS`.
+1. **Register** the models you want to compare, one `[section]` each in `scripts/models.ini`.
 2. **Prefetch** (`prefetch.sh`): download every GGUF up front so the sweep never stalls mid-run.
 3. **Speed + fit sweep** (`run-bench.sh`): `llama-bench` over every `config × depth`; one CSV row
    per cell, with peak VRAM/RAM sampled alongside.
@@ -17,13 +17,15 @@ full worked example). This doc is model-neutral.
 
 ## How to add a model
 
-The scripts are a model-neutral engine driven entirely by the `CONFIGS` matrix. You never edit a
-script to add a model; you add **data**:
+The scripts are a model-neutral engine driven entirely by the `models.ini` registry. You never
+edit a script to add a model; you add **data**:
 
-1. Add one `CONFIGS` line: `label|hf_repo:quant|type[|system_prompt][|template_path]`
-   (fields 4-5 optional; see `scripts/configs.sh` for the full format docs).
+1. Add one `[label]` section to `scripts/models.ini` with `hf = repo:quant` and
+   `type = dense|moe`. Optional keys: `sys` (system prompt), `template` (chat-template path),
+   and any llama.cpp flag as `key = value` — shared defaults live in `[*]`, and a `bench.` /
+   `quality.` prefix scopes a key to one script (full format docs in the file header).
 2. If the model needs a fixed chat template (e.g. its stock template mangles tool-call XML), drop
-   the `.jinja` in `templates/` and point field 5 at it (`../templates/<file>.jinja`).
+   the `.jinja` in `templates/` and set `template = templates/<file>.jinja` (repo-root-relative).
 3. Run `./prefetch.sh && ./run-bench.sh && ./run-quality.sh`; the new model flows through unchanged.
 4. (Optional) Write up your findings in `model-benches/<model>.md`, using `qwen36.md` as the template.
 
@@ -59,10 +61,10 @@ onto the GPU until VRAM ~fills, for more speed.
 - **Low-bit quants can be runtime-sensitive.** A specific CUDA / `llama.cpp` build can make a given
   low-bit quant emit gibberish. Pin a known-good toolchain and **sanity-check the actual output**,
   not just that it loads. (Example: Qwen3.6 4-bit breaks on CUDA 13.2, see the case study.)
-- **Some models need a specific system prompt** to perform well. Set it per-model in `CONFIGS`
-  field 4. (Example: Qwen needs `You are Qwen, created by Alibaba Cloud. You are a helpful assistant.`)
+- **Some models need a specific system prompt** to perform well. Set it per-model via the `sys` key
+  in `models.ini`. (Example: Qwen needs `You are Qwen, created by Alibaba Cloud. You are a helpful assistant.`)
 - **Stock chat templates sometimes mangle tool-call XML.** If you need clean agentic/tool-call
-  output, supply a fixed template per-model in field 5. (Example: Qwen3.6 + the froggeric template.)
+  output, supply a fixed template per-model via the `template` key. (Example: Qwen3.6 + the froggeric template.)
 - **Judge uncensored/abliterated variants on your own quality outputs**, not the publisher's
   refusal/KLD numbers, and keep them on an isolated network.
 

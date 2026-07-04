@@ -7,8 +7,8 @@ This file provides guidance to coding agents (Claude Code, and any other agent t
 
 A self-contained bundle of **documentation + bash automation** for benchmarking GGUF quants (dense
 or MoE) of any local LLM under `llama.cpp` on a 16 GB NVIDIA GPU. The **engine is model-neutral**
-(driven entirely by the `CONFIGS` matrix); `configs.sh` ships with an **active Qwen3.6 sweep** you
-can re-comment to go neutral or replace with your own. The numbers in
+(driven entirely by the `models.ini` registry); the repo ships model-neutral, with the Qwen3.6
+example as a commented-out block in `models.ini` you can uncomment or replace with your own. The numbers in
 the worked example (`model-benches/qwen36.md`) are the reference figures for one configuration: a
 Proxmox LXC container with a passed-through RTX 4070 Ti Super 16 GB on a 7800X3D host, with 24 GB
 RAM / 8 cores allocated to the container (the 16 GB VRAM and ~22 GB usable RAM are the binding
@@ -28,11 +28,13 @@ that directory.
 
 ```bash
 chmod +x scripts/*.sh
-bash -n scripts/run-bench.sh && bash -n scripts/run-quality.sh   # lint (syntax-check); there is no test runner
+bash -n scripts/run-bench.sh && bash -n scripts/run-quality.sh   # lint (syntax-check)
+bash scripts/test-ini.sh                                         # parser test suite (the only test runner)
+./run-bench.sh --dry-run                                         # print composed commands, execute nothing
 
 cd scripts
-./prefetch.sh        # one-time: download every model in the CONFIGS matrix and integrity-check
-./run-bench.sh       # speed + fit sweep over CONFIGS × DEPTHS -> ../bench_results/throughput_<stamp>.csv
+./prefetch.sh        # one-time: download every model in models.ini and integrity-check
+./run-bench.sh       # speed + fit sweep over models.ini × DEPTHS -> ../bench_results/throughput_<stamp>.csv
 ./run-quality.sh     # start llama-server per model, answer every prompts/*.txt -> ../bench_results/quality/<label>/<prompt>.md
 ```
 
@@ -43,10 +45,16 @@ on macOS but **not meant to run here**. They run on the GPU box (the reference i
 ## How the pieces fit together
 
 ```
-configs.sh   ← the ONE file an operator edits. Defines: LLAMA_DIR (path to llama.cpp build),
-               the CONFIGS test matrix, DEPTHS, KV_QUANT, THREADS, NCMOE_ALL, PREFETCH_JOBS
-               (parallel downloads in prefetch.sh), and the global fallbacks CHAT_TEMPLATE /
-               SYS_DEFAULT. Sourced by all three scripts.
+models.ini   ← the ONE file an operator edits: the model registry. One [section] per model
+               ([*] = shared defaults). Reserved keys hf/type/sys/template; every other
+               key = value passes through to the llama command line.
+   ▲
+   │ parsed by ini.sh (ini_sections / ini_get / ini_flags)
+   │
+configs.sh   ← infra + measurement protocol: LLAMA_DIR, OUTDIR, MODELS_DIR (exported as
+               LLAMA_CACHE — the shared model store, default <repo>/models), DEPTHS, REPS,
+               PROMPT_LEN, GEN_LEN, PORT, PREFETCH_JOBS. Sources ini.sh; sourced by all
+               three scripts.
    ▲
    │ source ./configs.sh
    │
@@ -56,24 +64,29 @@ prefetch.sh ─┬─ run-bench.sh ─┬─ run-quality.sh
         identical across the three (no mismatch). Never swap this for huggingface-cli.
 ```
 
-- **The CONFIGS matrix is the central abstraction.** Each line is **5 pipe-delimited fields**
-  (fields 4-5 optional): `label|hf_repo:quant|type|system_prompt|chat_template_path`, where `type`
-  is `dense` or `moe`. Every script loops this same array. `type=moe` is the only thing that
-  triggers `--n-cpu-moe $NCMOE_ALL` (expert offload to RAM); dense models ignore it. **Adding a
-  model = adding one line here** (plus, if needed, a `.jinja` in `templates/`), and it flows through
-  prefetch → bench → quality unchanged. This is the model-neutral design: the scripts are a generic
-  engine, model-specifics are data. Do **not** fork the scripts per-model.
-- **All three scripts must read all 5 fields** (`IFS='|' read -r label repo type sys tmpl`). bash
-  `read` folds extra fields into the last variable, so reading only 3 would corrupt `type` into
-  `"moe|sys|tmpl"` and break the MoE branch. `prefetch.sh`/`run-bench.sh` ignore `sys`/`tmpl` but
-  still read them for this reason.
-- **`run-bench.sh`** uses `llama-bench` (no chat template, it doesn't do templating), sweeps each
-  config across every `DEPTHS` value, samples peak VRAM/RAM in a background `sample_mem` loop, and
+- **The models.ini registry is the central abstraction.** One `[section]` per model; the section
+  name is the label used in CSV rows and output dirs. Reserved keys: `hf = repo:quant` (resolved
+  via llama.cpp's `-hf` downloader — never a local path), `type = dense|moe`, `sys`, `template`.
+  Every other `key = value` passes through to the llama command line; `[*]` holds shared defaults
+  (per-section keys win), and a `bench.` / `quality.` prefix scopes a key to one script.
+  `type=moe` is the only thing that lets `n-cpu-moe` through (expert offload to RAM); dense
+  models never see it. **Adding a model = adding one section** (plus, if needed, a `.jinja` in
+  `templates/`), and it flows through prefetch → bench → quality unchanged. This is the
+  model-neutral design: the scripts are a generic engine, model-specifics are data. Do **not**
+  fork the scripts per-model.
+- **All parsing lives in `ini.sh`** — the scripts never read the file directly. Rules the parser
+  encodes (tested by `test-ini.sh`; keep tests in sync): an EMPTY value skips a key, but `0` does
+  NOT (`ngl = 0` is a real setting — deliberate divergence from launchers that drop zeroes);
+  keys in `SHORT_FLAGS` get one dash (`-ngl`), all others two (`--n-cpu-moe`), because
+  llama.cpp's parsers match option strings exactly and reject the wrong dash count.
+- **`run-bench.sh`** uses `llama-bench` (no chat template, it doesn't do templating), composes per-model flags via `ini_flags <label> bench` and sweeps each
+  model across every `DEPTHS` value, samples peak VRAM/RAM in a background `sample_mem` loop, and
   appends one CSV row per `config × depth`. An OOM writes `status=FAIL` for that row and continues,
   so the CSV doubles as the fit map (which quant dies at which context depth).
 - **`run-quality.sh`** uses `llama-server` (which *does* need a template, if any). Per model it
-  resolves the system prompt (field 4, else `SYS_DEFAULT`) and chat template (field 5, else global
-  `CHAT_TEMPLATE`, else the model's built-in), boots a server, POSTs each prompt to
+  resolves the system prompt (`sys` key, `[*]` as fallback) and chat template (`template` key,
+  `[*]` as fallback, else the model's built-in; relative paths anchor at the repo root), composes
+  server flags via `ini_flags <label> quality` (context size = `quality.c`), boots a server, POSTs each prompt to
   `/v1/chat/completions` at coding sampling settings (temp 0.6 / top_p 0.95 / top_k 20), writes one
   markdown file per answer, then kills the server and moves on. The system message is omitted
   entirely when no system prompt is set. Seeds 3 example prompts on first run if `prompts/` is empty.
@@ -83,10 +96,10 @@ prefetch.sh ─┬─ run-bench.sh ─┬─ run-quality.sh
 - **MoE ≠ small footprint.** Active-param names (e.g. "A3B") describe compute per token, not memory;
   all expert weights must be resident. A MoE Q4 GGUF often exceeds 16 GB VRAM, so experts are
   offloaded to RAM via `--n-cpu-moe`. The real ceiling for MoE is **system RAM**, not VRAM.
-- **`--n-cpu-moe` / MoE flag is applied only when `type=moe`.** This branch exists in all three
-  scripts; keep them in sync if you change how the matrix is parsed.
-- **System prompt and chat template are per-model, not global constants.** They are `CONFIGS` fields
-  4 and 5 (with `SYS_DEFAULT` / `CHAT_TEMPLATE` as fallbacks). Some models need a specific system
+- **`--n-cpu-moe` / MoE flag is applied only when `type=moe`.** The gate lives in exactly one
+  place — `ini_flags` in `ini.sh` — not in the runner scripts. Change it there or nowhere.
+- **System prompt and chat template are per-model, not global constants.** They are the `sys` and
+  `template` keys in `models.ini` (with the `[*]` section as the global fallback). Some models need a specific system
   prompt to perform, and some need a fixed template so tool-call XML isn't mangled. The Qwen3.6
   specifics (its required system prompt and the froggeric v20 template in `templates/`) are an
   **example**, documented in `model-benches/qwen36.md`, not a universal rule.
@@ -98,9 +111,10 @@ prefetch.sh ─┬─ run-bench.sh ─┬─ run-quality.sh
 
 ## Adding a model (the canonical recipe)
 
-1. Add a `CONFIGS` line: `label|hf_repo:quant|type[|system_prompt][|template_path]`.
-2. If the model needs a fixed template, drop it in `templates/` and point field 5 at it
-   (`../templates/<file>.jinja`, scripts-relative).
+1. Add a `[label]` section to `models.ini`: `hf = repo:quant`, `type = dense|moe`, plus optional
+   `sys` / `template` keys.
+2. If the model needs a fixed template, drop it in `templates/` and set `template = templates/<file>.jinja`
+   (repo-root-relative).
 3. `./prefetch.sh && ./run-bench.sh && ./run-quality.sh`.
 4. (Optional) Write up findings in `model-benches/<model>.md`, using `qwen36.md` as the template.
 
