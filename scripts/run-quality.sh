@@ -26,7 +26,7 @@ mapfile -t LABELS < <(ini_sections)
 [ "${#LABELS[@]}" -gt 0 ] || { echo "No models registered — uncomment or add sections in models.ini"; exit 1; }
 
 mkdir -p prompts "$OUTDIR/quality"
-GEN=768                 # max tokens per answer
+GEN="${GEN:-2048}"      # reasoning models need room to think AND answer; 768 truncates -> blank
 
 # Resolve a template path from models.ini: absolute stays as-is, relative is
 # anchored at the repo root (so `template = templates/foo.jinja` just works).
