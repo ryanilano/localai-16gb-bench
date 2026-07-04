@@ -222,8 +222,8 @@ model-benches/qwen36.md §3)_: the Youssofal 27B (lowest KLD) and **`27B_HauhauC
 those sections. Quant guidance: `IQ4_XS` for the stock-27B offload regime, or a 3-bit tag for more on-GPU
 KV room; the ~18 GB `Q4_K_P` overflows 16 GB — skip it.
 
-- [ ] **Gated 35B (needs a token):** to add `35B_Heretic_HauhauCS`, put an `HF_TOKEN` with repo access
-      in `.local/secrets.env` (see the Secrets block in `configs.sh`) and uncomment its section. Without a
+- [ ] **Gated / private repos (need a token):** for any gated GGUF repo, `export HF_TOKEN=hf_...` (from an
+      account with access) before running, then add or uncomment its section in `models.ini`. Without a
       token the `-hf` resolver returns HTTP 401 and it never downloads.
 - [ ] **Code finetune (separate, experimental):** `27B_NEO_CODE_*` (DavidAU) is a code-specialized
       _finetune_, not an abliteration — it has no KLD drift proxy, so judge it **only** on the Step 6
