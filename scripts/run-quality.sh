@@ -109,8 +109,8 @@ for label in "${LABELS[@]}"; do
     echo "    $label / $name"
     # Include a system message only when a system prompt is set for this model.
     body=$(jq -n --arg sys "$sys" --rawfile u "$pf" --argjson n "$GEN" \
-      '{messages: (if ($sys|length) > 0 then [{role:"system",content:$sys}] else [] end)
-                  + [{role:"user",content:$u}],
+      '{messages: ((if ($sys|length) > 0 then [{role:"system",content:$sys}] else [] end)
+                   + [{role:"user",content:$u}]),
         temperature:0.6, top_p:0.95, top_k:20, max_tokens:$n}')
     resp=$(curl -sf "http://127.0.0.1:$PORT/v1/chat/completions" \
              -H 'Content-Type: application/json' -d "$body" || echo '{}')
